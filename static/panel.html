@@ -1,0 +1,110 @@
+<!DOCTYPE html>
+<html lang="pt-br">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Painel – Sistema de Atendimento</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;700;900&family=Oswald:wght@700&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="/static/style.css">
+  <script src="https://cdn.socket.io/4.5.4/socket.io.min.js"></script>
+</head>
+<body id="dynamic-body">
+<div id="panel-root">
+  <div id="panel-body">
+    <main class="call-card" id="call-card">
+      <div class="lbl" id="lbl-top">AGUARDANDO CHAMADA</div>
+      <div class="pw"  id="current-pw">----</div>
+      <div class="tb"  id="current-tb">―</div>
+    </main>
+    <aside class="history-card">
+      <h2>Últimas Chamadas</h2>
+      <div id="history-list"></div>
+    </aside>
+  </div>
+  <footer class="panel-footer">
+    <div class="brand" id="brand-name">Carregando...</div>
+    <div id="clock">00:00:00</div>
+  </footer>
+</div>
+<script>
+  const socket = io();
+  const pwEl   = document.getElementById('current-pw');
+  const tbEl   = document.getElementById('current-tb');
+  const lblEl  = document.getElementById('lbl-top');
+  const histEl = document.getElementById('history-list');
+  const slug   = window.location.pathname.split('/')[1]; // Pega o slug da URL: /slug/panel
+  let history  = [];
+  let tenantId = null;
+
+  async function loadStatus() {
+    const r = await fetch(`/api/${slug}/status`);
+    if(!r.ok) { document.body.innerHTML="<h1>Unidade não encontrada</h1>"; return; }
+    const d = await r.json();
+    
+    tenantId = d.tenant ? d.tenant.id : null;
+    
+    // Aplicar Aparência Customizada
+    const root = document.documentElement;
+    if(d.tenant.primary)   root.style.setProperty('--primary', d.tenant.primary);
+    if(d.tenant.secondary) root.style.setProperty('--accent', d.tenant.secondary);
+    if(d.tenant.bg)        root.style.setProperty('--bg', d.tenant.bg);
+    
+    document.getElementById('brand-name').textContent = d.system_name;
+    document.title = d.system_name + ' – Painel';
+
+    if(d.last_called) {
+      updateDisplay(d.last_called, true); // true para não falar o histórico ao carregar
+      history = [d.last_called, ...(d.history||[])];
+      renderHistory();
+    }
+
+    // Escuta eventos específicos do tenant
+    if(tenantId) {
+      socket.on(`password_called_${tenantId}`, (data) => {
+        updateDisplay(data);
+      });
+    }
+  }
+
+  function speak(pass, term) {
+    if(!window.speechSynthesis) return;
+    window.speechSynthesis.cancel();
+    const u = new SpeechSynthesisUtterance();
+    u.lang  = 'pt-BR'; u.rate = 0.88; u.volume = 1;
+    u.text  = `Senha ${pass.split('').join(' ')}, ${term}`;
+    let n=0; u.onend = ()=>{ if(++n<2) window.speechSynthesis.speak(u); };
+    window.speechSynthesis.speak(u);
+  }
+
+  function updateDisplay(d, silent=false) {
+    lblEl.textContent = d.label || 'CHAMADA';
+    pwEl.classList.remove('flash'); void pwEl.offsetWidth; pwEl.classList.add('flash');
+    pwEl.textContent = d.password;
+    tbEl.textContent = `🖥 ${d.terminal}`;
+    
+    if(!silent) speak(d.password, d.terminal);
+    
+    if(!history.find(h => h.password === d.password && h.time === d.time)) {
+      history.unshift(d); if(history.length>8) history.pop();
+      renderHistory();
+    }
+  }
+
+  function renderHistory() {
+    histEl.innerHTML = history.slice(1).map((item,i)=>`
+      <div class="hi" style="opacity:${Math.max(0.3, 1-i*0.15)};border-left-color:${item.color||'var(--primary)'}">
+        <div><div class="hp">${item.password}</div><div class="ht">${item.terminal}</div></div>
+        <div style="font-size:.75rem;color:var(--muted)">${item.time||''}</div>
+      </div>`).join('');
+  }
+
+  (function tick(){
+    if(document.getElementById('clock')) document.getElementById('clock').textContent = new Date().toLocaleTimeString('pt-BR');
+    setTimeout(tick, 1000);
+  })();
+
+  loadStatus();
+</script>
+</body>
+</html>

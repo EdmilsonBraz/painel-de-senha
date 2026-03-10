@@ -1,0 +1,238 @@
+<!DOCTYPE html>
+<html lang="pt-br">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1">
+  <title>Totem – Sistema de Atendimento</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;700;900&family=Oswald:wght@700&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+  <link rel="stylesheet" href="/static/style.css">
+</head>
+<body id="dynamic-body">
+<div id="toast-container" class="toast-container"></div>
+<div class="kiosk-root">
+  <header class="kiosk-hdr">
+    <div id="logo-container" style="display:none; margin-right: 15px;">
+        <img id="tenant-logo" style="height: 50px; max-width: 150px; object-fit: contain;">
+    </div>
+    <div class="brand" id="brand-name">Carregando...</div>
+    <div class="tagline" id="tagline">Toque para retirar sua senha</div>
+  </header>
+  <div class="kiosk-grid" id="kiosk-grid"></div>
+</div>
+
+<!-- Modal Config Kiosk -->
+<div class="modal-overlay hidden" id="modal-kiosk-settings">
+  <div class="modal-card">
+    <h3><i class="fa fa-print"></i> Configurações do Totem</h3>
+    <div class="form-group">
+        <label>Endereço da Bridge (Porta 8001)</label>
+        <input id="cfg-bridge" placeholder="http://localhost:8001">
+    </div>
+    <div style="display:grid; grid-template-columns: 1fr 1fr; gap:10px">
+        <div class="form-group">
+            <label>Porta (COM/USB)</label>
+            <input id="cfg-port" placeholder="COM3">
+        </div>
+        <div class="form-group">
+            <label>Velocidade (Baud)</label>
+            <select id="cfg-baud">
+                <option value="9600">9600</option>
+                <option value="19200">19200</option>
+                <option value="38400">38400</option>
+                <option value="115200">115200</option>
+            </select>
+        </div>
+    </div>
+    <div class="form-group" style="display:flex; align-items:center; gap:10px">
+        <input type="checkbox" id="cfg-show-keys" style="width:20px; height:20px">
+        <label for="cfg-show-keys" style="margin:0">Exibir teclas nos botões (TECLA 1, etc.)</label>
+    </div>
+    <div class="modal-footer">
+        <button class="btn btn-neutral" onclick="closeKioskSettings()">Sair</button>
+        <button class="btn btn-primary" onclick="saveKioskSettings()">Salvar</button>
+    </div>
+  </div>
+</div>
+
+<div class="print-overlay" id="overlay">
+  <div class="po-spinner"></div>
+  <div class="po-pass" id="po-pass">---</div>
+</div>
+
+<script>
+  let session = null;
+  let config  = {};
+  let types   = [];
+  let keyMap  = {};
+  const overlay = document.getElementById('overlay');
+  const grid    = document.getElementById('kiosk-grid');
+
+  function showMessage(msg, type = 'info') {
+    const container = document.getElementById('toast-container');
+    const toast = document.createElement('div');
+    toast.className = `toast ${type}`;
+    const icon = type === 'error' ? 'fa-circle-xmark' : (type === 'success' ? 'fa-circle-check' : 'fa-info-circle');
+    toast.innerHTML = `<i class="fa ${icon}"></i> <span>${msg}</span>`;
+    container.appendChild(toast);
+    setTimeout(() => { toast.style.animation = 'toastZoomOut 0.3s ease forwards'; setTimeout(() => toast.remove(), 300); }, 3000);
+  }
+
+  async function init() {
+    try {
+        session = JSON.parse(localStorage.getItem('sa_session') || '{}');
+        if(!session?.token) { window.location = '/login'; return; }
+
+        const res  = await fetch('/api/status', { headers: { 'Authorization': 'Bearer '+session.token } });
+        if(!res.ok) { window.location='/login'; return; }
+        const data = await res.json();
+        
+        config = data.config || {};
+        types  = data.types  || [];
+        
+        const tenant = data.tenant || {};
+        
+        // UI Updates
+        document.getElementById('brand-name').textContent = data.system_name || tenant.name || 'Totem';
+        document.getElementById('tagline').textContent    = data.system_subtitle || 'Toque para retirar sua senha';
+        
+        if(tenant.logo) {
+            document.getElementById('tenant-logo').src = tenant.logo;
+            document.getElementById('logo-container').style.display = 'block';
+        }
+        
+        // Theme
+        const root = document.documentElement;
+        if(tenant.primary)   root.style.setProperty('--primary', tenant.primary);
+        if(tenant.secondary) root.style.setProperty('--accent',  tenant.secondary);
+        if(tenant.bg)        root.style.setProperty('--bg',      tenant.bg);
+
+        // Populate Settings Modal
+        if(document.getElementById('cfg-bridge')) {
+            document.getElementById('cfg-bridge').value = config.kiosk_bridge_url   || 'http://localhost:8001';
+            document.getElementById('cfg-port').value   = config.kiosk_printer_port || 'COM3';
+            document.getElementById('cfg-baud').value   = config.kiosk_printer_baud || '9600';
+            document.getElementById('cfg-show-keys').checked = config.kiosk_show_keys === 'true';
+        }
+
+        buildGrid();
+
+        // Setup mode logic
+        const urlParams = new URLSearchParams(window.location.search);
+        if(urlParams.get('setup') === '1') openKioskSettings();
+    } catch(err) {
+        console.error("Kiosk Init Error:", err);
+        showMessage("Erro ao iniciar totem: " + err.message, "error");
+    }
+  }
+
+  function buildGrid() {
+    if(!grid) return;
+    grid.style.gridTemplateColumns = types.length <= 2 ? '1fr' : '1fr 1fr';
+    grid.innerHTML = '';
+    const keyLabels = ['1', '2', '3', '4'];
+
+    types.forEach((t, i) => {
+      if(i < 4) {
+          keyMap[(i+1).toString()] = t.code;
+          keyMap[`F${i+1}`] = t.code;
+      }
+
+      const btn = document.createElement('button');
+      btn.className = 'kiosk-btn';
+      btn.id = 'kb-' + t.code;
+      btn.style.background = `linear-gradient(145deg, ${t.color}cc, ${t.color}ee)`;
+      btn.style.boxShadow  = `0 15px 40px ${t.color}44`;
+      
+      const showKeys = config.kiosk_show_keys === 'true';
+
+      btn.innerHTML = `
+        <span class="kb-icon"><i class="fa ${t.icon}"></i></span>
+        ${t.name.toUpperCase()}
+        ${(i < 4 && showKeys) ? `<span class="kb-key">TECLA ${keyLabels[i]}</span>` : ''}
+      `;
+      btn.onclick = () => generateTicket(t.code);
+      grid.appendChild(btn);
+    });
+  }
+
+  async function generateTicket(code) {
+    if(overlay && overlay.classList.contains('show')) return;
+    const btn = document.getElementById('kb-' + code);
+    if(btn) { btn.style.transform='scale(.92)'; setTimeout(()=>btn.style.transform='',300); }
+    
+    try {
+      const slug = session?.user?.tenant?.slug || config.slug;
+      if(!slug) throw new Error("Unidade não identificada");
+      
+      const res  = await fetch(`/api/${slug}/generate/${code}`, { method: 'POST' });
+      const data = await res.json();
+      
+      if(document.getElementById('po-pass')) document.getElementById('po-pass').textContent = data.password || '---';
+      if(overlay) overlay.classList.add('show');
+      
+      // Attempt Print via Bridge
+      if(config.kiosk_bridge_url) {
+          fetch(config.kiosk_bridge_url + '/print', {
+              method: 'POST',
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify({
+                  port: config.kiosk_printer_port || 'COM3',
+                  baud: parseInt(config.kiosk_printer_baud || '9600'),
+                  content: `\n\n  ${data.tenant_name}\n  ========================\n\n      SENHA: ${data.password}\n\n  ${data.type_name}\n  ${data.date} ${data.time}\n\n  ========================\n\n\n\n\x1Dm\x01`
+              })
+          }).catch(err => console.error("Bridge Error:", err));
+      }
+      
+      setTimeout(() => { if(overlay) overlay.classList.remove('show') }, 3000);
+    } catch(e) {
+      showMessage('Erro ao gerar senha.', 'error');
+    }
+  }
+
+  function openKioskSettings() { 
+    const m = document.getElementById('modal-kiosk-settings');
+    if(m) m.classList.remove('hidden'); 
+  }
+  function closeKioskSettings() { 
+    const m = document.getElementById('modal-kiosk-settings');
+    if(m) m.classList.add('hidden'); 
+  }
+  
+  async function saveKioskSettings() {
+      try {
+          const data = {
+              kiosk_bridge_url:   document.getElementById('cfg-bridge').value,
+              kiosk_printer_port: document.getElementById('cfg-port').value,
+              kiosk_printer_baud: document.getElementById('cfg-baud').value,
+              kiosk_show_keys:    document.getElementById('cfg-show-keys').checked.toString()
+          };
+          const res = await fetch('/api/admin/settings', {
+              method: 'POST',
+              headers: { 'Authorization': 'Bearer '+session.token, 'Content-Type': 'application/json' },
+              body: JSON.stringify(data)
+          });
+          if(res.ok) {
+              showMessage('Configurações salvas!', 'success');
+              config.kiosk_bridge_url = data.kiosk_bridge_url;
+              config.kiosk_printer_port = data.kiosk_printer_port;
+              config.kiosk_printer_baud = data.kiosk_printer_baud;
+              config.kiosk_show_keys = data.kiosk_show_keys;
+              buildGrid();
+              closeKioskSettings();
+          } else {
+              showMessage('Erro ao salvar!', 'error');
+          }
+      } catch(e) { showMessage('Erro de rede ao salvar', 'error'); }
+  }
+
+  window.addEventListener('keydown', e => {
+    if(overlay && overlay.classList.contains('show')) return;
+    if(keyMap[e.key]) generateTicket(keyMap[e.key]);
+  });
+
+  init();
+</script>
+</body>
+</html>

@@ -1,0 +1,294 @@
+<!DOCTYPE html>
+<html lang="pt-br">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Superadmin – Gestão SaaS</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;600;700;900&family=Oswald:wght@700&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+  <link rel="stylesheet" href="/static/style.css">
+</head>
+<body class="admin-layout">
+<div id="toast-container" class="toast-container"></div>
+
+  <div class="admin-topbar">
+    <div class="brand">SaaS CONTROL CENTER</div>
+    <span id="adm-user" style="font-size:.85rem;color:var(--muted)"></span>
+    <button class="btn btn-danger btn-sm" onclick="logout()">Sair</button>
+  </div>
+
+  <nav class="admin-sidebar" style="width: 220px;">
+    <div class="nav-item active" onclick="showSuperSection('tenants')" id="nav-tenants"><i class="fa fa-building"></i> Unidades</div>
+    <div class="nav-item" onclick="showSuperSection('plans')" id="nav-plans"><i class="fa fa-layer-group"></i> Planos</div>
+  </nav>
+
+  <div class="admin-content" style="margin-left: 220px;">
+    
+    <!-- Seção Unidades -->
+    <div class="section active" id="section-tenants">
+        <div class="section-header">
+          <h2>Unidades Cadastradas</h2>
+          <button class="btn btn-primary btn-sm" onclick="openTenantModal()"><i class="fa fa-plus"></i> Nova Unidade</button>
+        </div>
+        <div class="table-card">
+          <table class="data-table">
+            <thead><tr><th>ID</th><th>Nome</th><th>Plano</th><th>Acessos</th><th>Status</th><th>Ações</th></tr></thead>
+            <tbody id="tenants-tbody"></tbody>
+          </table>
+        </div>
+    </div>
+
+    <!-- Seção Planos -->
+    <div class="section" id="section-plans">
+        <div class="section-header">
+          <h2>Planos de Contratação</h2>
+          <button class="btn btn-primary btn-sm" onclick="openPlanModal()"><i class="fa fa-plus"></i> Novo Plano</button>
+        </div>
+        <div class="table-card">
+          <table class="data-table">
+            <thead><tr><th>Nome</th><th>Guichês</th><th>Usuários</th><th>Tipos</th><th>Ações</th></tr></thead>
+            <tbody id="plans-tbody"></tbody>
+          </table>
+        </div>
+    </div>
+
+    <!-- Seção Gerenciar Usuários da Unidade (Dinamica) -->
+    <div class="section" id="section-tenant-users">
+        <div class="section-header">
+          <h2 id="users-tenant-title">Usuários da Unidade</h2>
+          <button class="btn btn-neutral btn-sm" onclick="showSuperSection('tenants')">Voltar</button>
+        </div>
+        <div class="table-card">
+          <table class="data-table">
+            <thead><tr><th>ID</th><th>Nome</th><th>Username</th><th>Role</th><th>Ações</th></tr></thead>
+            <tbody id="tenant-users-tbody"></tbody>
+          </table>
+        </div>
+    </div>
+
+  </div>
+
+  <!-- Modal Unidade -->
+  <div class="modal-overlay hidden" id="modal-tenant">
+    <div class="modal-card">
+      <h3 id="mt-title">Nova Unidade</h3>
+      <div class="form-group"><label>Nome</label><input id="t-name"></div>
+      <div class="form-group"><label>Slug na URL (ex: matriz)</label><input id="t-slug"></div>
+      <div class="form-group">
+          <label>Plano</label>
+          <select id="t-plan-id"></select>
+      </div>
+      <div class="modal-footer"><button class="btn btn-neutral" onclick="closeModal('modal-tenant')">Cancelar</button><button class="btn btn-primary" onclick="saveTenant()">Salvar</button></div>
+    </div>
+  </div>
+
+  <!-- Modal Plano -->
+  <div class="modal-overlay hidden" id="modal-plan">
+    <div class="modal-card">
+      <h3 id="mp-title">Novo Plano</h3>
+      <div class="form-group"><label>Nome</label><input id="p-name"></div>
+      <div style="display:grid; grid-template-columns: 1fr 1fr 1fr; gap: 10px;">
+          <div class="form-group"><label>Guichês</label><input type="number" id="p-max-g" value="5"></div>
+          <div class="form-group"><label>Usuários</label><input type="number" id="p-max-u" value="10"></div>
+          <div class="form-group"><label>Tipos</label><input type="number" id="p-max-t" value="4"></div>
+      </div>
+      <div class="modal-footer"><button class="btn btn-neutral" onclick="closeModal('modal-plan')">Cancelar</button><button class="btn btn-primary" onclick="savePlan()">Salvar</button></div>
+    </div>
+  </div>
+
+  <!-- Modal Editar Usuário (Superadmin) -->
+  <div class="modal-overlay hidden" id="modal-user-edit">
+    <div class="modal-card">
+      <h3>Editar Usuário</h3>
+      <div class="form-group"><label>Nome Completo</label><input id="ue-name"></div>
+      <div class="form-group"><label>Username</label><input id="ue-user"></div>
+      <div class="form-group"><label>Nova Senha (deixe vazio para manter)</label><input type="password" id="ue-pass"></div>
+      <div class="form-group">
+          <label>Role</label>
+          <select id="ue-role">
+              <option value="admin">Administrador</option>
+              <option value="operator">Operador</option>
+              <option value="kiosk">Totem (Kiosk)</option>
+          </select>
+      </div>
+      <div class="modal-footer"><button class="btn btn-neutral" onclick="closeModal('modal-user-edit')">Cancelar</button><button class="btn btn-primary" onclick="saveUserEdit()">Atualizar Usuário</button></div>
+    </div>
+  </div>
+
+<script>
+  let session = null;
+  let plans   = [];
+  let tenants = [];
+  let tenantUsers = [];
+  let editId  = null;
+  let currentTid = null;
+
+  function showMessage(msg, type = 'info') {
+    const container = document.getElementById('toast-container');
+    const toast = document.createElement('div');
+    toast.className = `toast ${type}`;
+    const icon = type === 'error' ? 'fa-circle-xmark' : (type === 'success' ? 'fa-circle-check' : 'fa-info-circle');
+    toast.innerHTML = `<i class="fa ${icon}"></i> <span>${msg}</span>`;
+    container.appendChild(toast);
+    setTimeout(() => { toast.style.animation = 'toastZoomOut 0.3s ease forwards'; setTimeout(() => toast.remove(), 300); }, 3000);
+  }
+
+  async function init() {
+    session = JSON.parse(localStorage.getItem('sa_session') || '{}');
+    if(!session?.token || session.user?.role !== 'superadmin') { window.location='/login'; return; }
+    document.getElementById('adm-user').textContent = '👤 ' + session.user.name;
+    loadPlans();
+    loadTenants();
+  }
+
+  function showSuperSection(name) {
+      document.querySelectorAll('.section').forEach(s => s.classList.remove('active'));
+      document.querySelectorAll('.nav-item').forEach(n => n.classList.remove('active'));
+      document.getElementById('section-'+name).classList.add('active');
+      if(document.getElementById('nav-'+name)) document.getElementById('nav-'+name).classList.add('active');
+  }
+
+  /* ── PLANS ── */
+  async function loadPlans() {
+    const res = await fetch('/api/super/plans', { headers: {'Authorization':'Bearer '+session.token} });
+    plans = await res.json();
+    document.getElementById('plans-tbody').innerHTML = plans.map((p, idx)=>`
+      <tr>
+        <td><strong>${p.name}</strong></td>
+        <td>${p.max_guiches}</td>
+        <td>${p.max_users}</td>
+        <td>${p.max_types}</td>
+        <td class="actions">
+            <button class="btn-icon" onclick="openPlanModal(${idx})"><i class="fa fa-pen"></i></button>
+        </td>
+      </tr>`).join('');
+    
+    // Select no modal
+    document.getElementById('t-plan-id').innerHTML = plans.map(p=>`<option value="${p.id}">${p.name}</option>`).join('');
+  }
+
+  let editPlanId = null;
+  function openPlanModal(idx=null) {
+      const p = idx!==null ? plans[idx] : null;
+      editPlanId = p?.id || null;
+      document.getElementById('mp-title').textContent = p ? 'Editar Plano' : 'Novo Plano';
+      document.getElementById('p-name').value = p?.name || '';
+      document.getElementById('p-max-g').value = p?.max_guiches || 5;
+      document.getElementById('p-max-u').value = p?.max_users || 10;
+      document.getElementById('p-max-t').value = p?.max_types || 4;
+      document.getElementById('modal-plan').classList.remove('hidden');
+  }
+
+  async function savePlan() {
+      const body = {
+          name: document.getElementById('p-name').value,
+          max_guiches: parseInt(document.getElementById('p-max-g').value),
+          max_users:   parseInt(document.getElementById('p-max-u').value),
+          max_types:   parseInt(document.getElementById('p-max-t').value)
+      };
+      const url = editPlanId ? `/api/super/plans/${editPlanId}` : '/api/super/plans';
+      const res = await fetch(url, { method: editPlanId?'PUT':'POST', headers:{'Authorization':'Bearer '+session.token,'Content-Type':'application/json'}, body:JSON.stringify(body) });
+      if(res.ok) {
+          showMessage('Plano salvo!', 'success');
+          closeModal('modal-plan'); loadPlans();
+      } else {
+          const e = await res.json(); showMessage(e.detail, 'error');
+      }
+  }
+
+  /* ── TENANTS ── */
+  async function loadTenants() {
+    const res = await fetch('/api/super/tenants', { headers: {'Authorization':'Bearer '+session.token} });
+    tenants = await res.json();
+    document.getElementById('tenants-tbody').innerHTML = tenants.map((t, idx)=>`
+      <tr>
+        <td>${t.id}</td>
+        <td><strong>${t.name}</strong> <br><small style="color:var(--muted)">/${t.slug}</small></td>
+        <td><span class="badge badge-admin">${t.plan_id ? plans.find(p=>p.id===t.plan_id)?.name : 'Nenhum'}</span></td>
+        <td class="actions">
+            <button class="btn btn-neutral btn-sm" onclick="loadTenantUsers(${t.id},'${t.name}')"><i class="fa fa-users"></i></button>
+            <a href="/${t.slug}/panel" target="_blank" class="btn btn-neutral btn-sm">Painel</a>
+        </td>
+        <td>${t.active ? 'Ativo' : 'Pendente'}</td>
+        <td class="actions">
+            <button class="btn-icon" onclick="openTenantModal(${idx})"><i class="fa fa-pen"></i></button>
+        </td>
+      </tr>`).join('');
+  }
+
+  async function loadTenantUsers(tid, name) {
+      currentTid = tid;
+      if(name) document.getElementById('users-tenant-title').textContent = "Usuários: " + name;
+      showSuperSection('tenant-users');
+      const res = await fetch(`/api/super/tenants/${tid}/users`, { headers: {'Authorization':'Bearer '+session.token} });
+      tenantUsers = await res.json();
+      document.getElementById('tenant-users-tbody').innerHTML = tenantUsers.map((u, idx)=>`
+        <tr>
+            <td>${u.id}</td>
+            <td>${u.name}</td>
+            <td><code>${u.username}</code></td>
+            <td>${u.role}</td>
+            <td class="actions">
+                <button class="btn-icon" onclick="openUserEditModal(${idx})"><i class="fa fa-key"></i></button>
+            </td>
+        </tr>`).join('');
+  }
+
+  /* ── USER EDIT ── */
+  let editUid = null;
+  function openUserEditModal(idx) {
+      const u = tenantUsers[idx];
+      editUid = u.id;
+      document.getElementById('ue-name').value = u.name;
+      document.getElementById('ue-user').value = u.username;
+      document.getElementById('ue-role').value = u.role;
+      document.getElementById('modal-user-edit').classList.remove('hidden');
+  }
+  async function saveUserEdit() {
+      const body = {
+          name: document.getElementById('ue-name').value,
+          username: document.getElementById('ue-user').value,
+          role: document.getElementById('ue-role').value,
+          password: document.getElementById('ue-pass').value || null
+      };
+      const res = await fetch(`/api/super/users/${editUid}`, { method:'PUT', headers:{'Authorization':'Bearer '+session.token,'Content-Type':'application/json'}, body:JSON.stringify(body) });
+      if(res.ok) {
+        showMessage('Usuário atualizado!', 'success');
+        closeModal('modal-user-edit'); loadTenantUsers(currentTid);
+      } else {
+        const e = await res.json(); showMessage(e.detail, 'error');
+      }
+  }
+
+  /* ── HELPERS ── */
+  function openTenantModal(idx=null) {
+      const t = idx!==null ? tenants[idx] : null;
+      editId = t?.id || null;
+      document.getElementById('mt-title').textContent = t ? 'Editar Unidade' : 'Nova Unidade';
+      document.getElementById('t-name').value = t?.name || '';
+      const slugInput = document.getElementById('t-slug');
+      slugInput.value = t?.slug || '';
+      slugInput.parentNode.style.display = t ? 'none' : 'block';
+      document.getElementById('t-plan-id').value = t?.plan_id || plans[0]?.id;
+      document.getElementById('modal-tenant').classList.remove('hidden');
+  }
+  async function saveTenant() {
+      const body = { name: document.getElementById('t-name').value, plan_id: parseInt(document.getElementById('t-plan-id').value) };
+      if(!editId) body.slug = document.getElementById('t-slug').value;
+      const url = editId ? `/api/super/tenants/${editId}` : '/api/super/tenants';
+      const res = await fetch(url, { method: editId?'PUT':'POST', headers:{'Authorization':'Bearer '+session.token,'Content-Type':'application/json'}, body:JSON.stringify(body) });
+      if(res.ok) {
+          showMessage('Unidade salva!', 'success');
+          closeModal('modal-tenant'); loadTenants();
+      } else {
+          const e = await res.json(); showMessage(e.detail, 'error');
+      }
+  }
+
+  function closeModal(id) { document.getElementById(id).classList.add('hidden'); }
+  function logout() { localStorage.removeItem('sa_session'); window.location='/login'; }
+  init();
+</script>
+</body>
+</html>

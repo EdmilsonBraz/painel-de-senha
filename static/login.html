@@ -1,0 +1,202 @@
+<!DOCTYPE html>
+<html lang="pt-br">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Login – Sistema SaaS</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;600;700;900&family=Oswald:wght@700&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+  <link rel="stylesheet" href="/static/style.css">
+</head>
+<body>
+<div id="toast-container" class="toast-container"></div>
+<div class="login-root">
+  <div class="login-card">
+
+    <div class="login-logo">
+      <div class="ico"><i class="fa fa-ticket"></i></div>
+      <h1 id="sys-name">Bem-vindo</h1>
+      <p>Informe suas credenciais</p>
+    </div>
+
+    <div class="login-err" id="login-err"></div>
+
+    <form onsubmit="event.preventDefault(); doLogin();">
+      <div class="form-group">
+        <label>Usuário</label>
+        <input id="username" type="text" placeholder="seu.usuario" autocomplete="username">
+      </div>
+      <div class="form-group">
+        <label>Senha</label>
+        <input id="password" type="password" placeholder="••••••••" autocomplete="current-password">
+      </div>
+
+      <button type="submit" class="btn btn-primary" style="width:100%;justify-content:center;padding:14px;font-size:1rem;margin-top:6px">
+        <i class="fa fa-arrow-right-to-bracket"></i> Entrar
+      </button>
+    </form>
+
+  </div>
+</div>
+
+<!-- Modal seleção de guichê -->
+<div class="modal-overlay hidden" id="modal-guiche">
+  <div class="modal-card">
+    <h3><i class="fa fa-desktop"></i> &nbsp;Selecione seu Guichê</h3>
+    <p style="color:var(--muted);font-size:.88rem;margin-bottom:16px">
+      Olá, <strong id="user-name-modal"></strong>! Selecione seu guichê na unidade <span id="tenant-name-modal"></span>.
+    </p>
+    <div class="guiche-grid" id="guiche-grid"></div>
+    <div class="modal-footer">
+      <button class="btn btn-primary" onclick="confirmGuiche()" id="btn-confirm-guiche" disabled>
+        <i class="fa fa-check"></i> Confirmar
+      </button>
+    </div>
+  </div>
+</div>
+
+<!-- Modal Opção Totem -->
+<div class="modal-overlay hidden" id="modal-kiosk-choice">
+  <div class="modal-card" style="text-align:center">
+    <h3><i class="fa fa-tv"></i> Acesso ao Totem</h3>
+    <p style="margin-bottom:20px">Selecione o que deseja abrir agora:</p>
+    <div style="display:grid; grid-template-columns:1fr 1fr; gap:15px">
+        <button class="btn btn-primary" onclick="kioskAction('kiosk')" style="flex-direction:column; padding:20px; font-size:1rem; gap:10px">
+            <i class="fa fa-ticket" style="font-size:2rem"></i>
+            Abrir Totem
+        </button>
+        <button class="btn btn-neutral" onclick="kioskAction('settings')" style="flex-direction:column; padding:20px; font-size:1rem; gap:10px; border:2px solid var(--border)">
+            <i class="fa fa-cog" style="font-size:2rem"></i>
+            Configurações
+        </button>
+    </div>
+  </div>
+</div>
+
+<script>
+  let sessionUser = null;
+  let selectedGuiche = null;
+
+  function showMessage(msg, type = 'info') {
+    const container = document.getElementById('toast-container');
+    const toast = document.createElement('div');
+    toast.className = `toast ${type}`;
+    const icon = type === 'error' ? 'fa-circle-xmark' : (type === 'success' ? 'fa-circle-check' : 'fa-info-circle');
+    toast.innerHTML = `<i class="fa ${icon}"></i> <span>${msg}</span>`;
+    container.appendChild(toast);
+    setTimeout(() => {
+      toast.style.animation = 'toastFadeOut 0.3s ease forwards';
+      setTimeout(() => toast.remove(), 300);
+    }, 3000);
+  }
+
+  async function doLogin() {
+    const u = document.getElementById('username').value.trim();
+    const p = document.getElementById('password').value;
+    const err = document.getElementById('login-err');
+    err.style.display = 'none';
+
+    if(!u || !p) { err.textContent = 'Preencha todos os campos.'; err.style.display = 'block'; return; }
+
+    try {
+      const res  = await fetch('/api/auth/login', {
+        method: 'POST',
+        headers: {'Content-Type':'application/json'},
+        body: JSON.stringify({username: u, password: p})
+      });
+      const data = await res.json();
+      if(!res.ok) { err.textContent = data.detail || 'Erro ao fazer login.'; err.style.display = 'block'; return; }
+
+      sessionUser = data;
+
+      const role = (data.user.role || '').toLowerCase();
+      
+      if(role === 'superadmin') {
+        localStorage.setItem('sa_session', JSON.stringify({ token: data.token, user: data.user }));
+        window.location = '/superadmin';
+        return;
+      }
+      
+      if(role === 'kiosk' || role === 'totem') {
+        localStorage.setItem('sa_session', JSON.stringify({
+           token: data.token, user: data.user, slug: data.user.tenant?.slug, guiche: 'Kiosk'
+        }));
+        const modal = document.getElementById('modal-kiosk-choice');
+        modal.classList.remove('hidden');
+        modal.style.display = 'flex';
+        modal.style.zIndex  = '10001';
+        return;
+      }
+
+      showGuicheModal();
+    } catch(e) { err.textContent = 'Erro de conexão.'; err.style.display = 'block'; }
+  }
+
+  async function showGuicheModal() {
+    try {
+      const res = await fetch('/api/guiches', { headers: { 'Authorization': 'Bearer ' + sessionUser.token } });
+      const guiches = await res.json();
+      const grid = document.getElementById('guiche-grid');
+
+      document.getElementById('user-name-modal').textContent = sessionUser.user.name;
+      document.getElementById('tenant-name-modal').textContent = sessionUser.user.tenant?.name || '---';
+      grid.innerHTML = '';
+
+      if (!Array.isArray(guiches)) {
+          grid.innerHTML = '<p style="color:var(--danger)">Erro ao carregar guichês. Contate o administrador.</p>';
+          document.getElementById('modal-guiche').classList.remove('hidden');
+          return;
+      }
+
+      guiches.forEach(g => {
+        const el = document.createElement('div');
+        el.className = 'guiche-option' + (g.busy ? ' busy' : '');
+        el.innerHTML = `<span>${g.name}</span>${g.busy ? `<small>(${g.occupant_name})</small>` : ''}`;
+        el.onclick = () => {
+          if (g.busy) {
+              if (!confirm(`O guichê ${g.name} já está sendo usado por ${g.occupant_name}. Deseja desconectá-lo e assumir o controle?`)) return;
+          }
+          document.querySelectorAll('.guiche-option').forEach(x => x.classList.remove('selected'));
+          el.classList.add('selected');
+          selectedGuiche = g;
+          document.getElementById('btn-confirm-guiche').disabled = false;
+        };
+        grid.appendChild(el);
+      });
+
+      document.getElementById('modal-guiche').classList.remove('hidden');
+    } catch(e) {
+      showMessage('Erro ao carregar guichês.', 'error');
+    }
+  }
+
+  async function confirmGuiche() {
+    if(!selectedGuiche) return;
+    
+    // Marcar como ocupado no server
+    await fetch(`/api/guiches/occupy?name=${encodeURIComponent(selectedGuiche.name)}`, {
+        method: 'POST',
+        headers: { 'Authorization': 'Bearer ' + sessionUser.token }
+    });
+
+    localStorage.setItem('sa_session', JSON.stringify({
+      token:  sessionUser.token,
+      user:   sessionUser.user,
+      guiche: selectedGuiche.name,
+      slug:   sessionUser.user.tenant?.slug
+    }));
+    window.location = sessionUser.user.role === 'admin' ? '/admin' : '/terminal';
+  }
+
+  function kioskAction(type) {
+    const slug = sessionUser.user.tenant?.slug;
+    if(type === 'kiosk') {
+        window.location = `/${slug}/kiosk`;
+    } else {
+        window.location = `/${slug}/kiosk?setup=1`;
+    }
+  }
+</script>
+</body>
+</html>

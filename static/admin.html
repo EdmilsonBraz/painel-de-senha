@@ -1,0 +1,401 @@
+<!DOCTYPE html>
+<html lang="pt-br">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Administração – Sistema de Atendimento</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;600;700;900&family=Oswald:wght@700&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+  <link rel="stylesheet" href="/static/style.css">
+  <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js"></script>
+</head>
+<body>
+<div id="toast-container" class="toast-container"></div>
+<div class="admin-layout">
+
+  <!-- Topbar -->
+  <div class="admin-topbar">
+    <div class="brand" id="adm-brand">Administração</div>
+    <span id="adm-user" style="font-size:.85rem;color:var(--muted)"></span>
+    <div style="display:flex;gap:8px">
+      <a href="/terminal" class="btn btn-neutral btn-sm"><i class="fa fa-desktop"></i> Terminal</a>
+      <button class="btn btn-danger btn-sm" onclick="logout()"><i class="fa fa-right-from-bracket"></i></button>
+    </div>
+  </div>
+
+  <!-- Sidebar -->
+    <nav class="admin-sidebar">
+    <div class="nav-item active" onclick="showSection('dash')" id="nav-dash"><i class="fa fa-gauge-high"></i> Dashboard</div>
+    <div class="nav-item" onclick="showSection('reports')" id="nav-reports"><i class="fa fa-chart-line"></i> Relatórios</div>
+    <div class="nav-item" onclick="showSection('types')" id="nav-types"><i class="fa fa-ticket"></i> Tipos de Senha</div>
+    <div class="nav-item" onclick="showSection('guiches')" id="nav-guiches"><i class="fa fa-desktop"></i> Guichês</div>
+    <div class="nav-item" onclick="showSection('users')" id="nav-users"><i class="fa fa-users"></i> Usuários</div>
+    <div class="nav-item" onclick="showSection('settings')" id="nav-settings"><i class="fa fa-gear"></i> Configurações</div>
+    <div class="nav-item" onclick="showSection('appearance')" id="nav-appearance"><i class="fa fa-palette"></i> Aparência</div>
+  </nav>
+
+  <!-- Content -->
+  <div class="admin-content">
+    <div class="section active" id="section-dash">
+      <div class="section-header"><h2><i class="fa fa-gauge-high"></i> Dashboard</h2></div>
+      <div class="stats-grid">
+        <div class="stat-card"><div class="sv" id="stat-total">0</div><div class="sl">Chamadas Hoje</div></div>
+        <div class="stat-card"><div class="sv" id="stat-active" style="color:var(--accent)">0</div><div class="sl">Guichês Ativos</div></div>
+      </div>
+    </div>
+
+    <div class="section" id="section-types">
+      <div class="section-header"><h2>Tipos de Senha</h2><button class="btn btn-primary btn-sm" onclick="openTypeModal()"><i class="fa fa-plus"></i> Novo Tipo</button></div>
+      <div class="table-card"><table class="data-table"><thead><tr><th>Cód</th><th>Nome</th><th>Ícone</th><th>Prio</th><th>Status</th><th>Ações</th></tr></thead><tbody id="types-tbody"></tbody></table></div>
+    </div>
+
+    <div class="section" id="section-guiches">
+      <div class="section-header"><h2>Guichês</h2><button class="btn btn-primary btn-sm" onclick="openGuicheModal()"><i class="fa fa-plus"></i> Novo Guichê</button></div>
+      <div class="table-card"><table class="data-table"><thead><tr><th>ID</th><th>Nome</th><th>Status</th><th>Ações</th></tr></thead><tbody id="guiches-tbody"></tbody></table></div>
+    </div>
+
+    <div class="section" id="section-users">
+      <div class="section-header"><h2>Usuários</h2><button class="btn btn-primary btn-sm" onclick="openUserModal()"><i class="fa fa-plus"></i> Novo Usuário</button></div>
+      <div class="table-card"><table class="data-table"><thead><tr><th>Nome</th><th>User</th><th>Perfil</th><th>Ações</th></tr></thead><tbody id="users-tbody"></tbody></table></div>
+    </div>
+
+    <div class="section" id="section-appearance">
+      <div class="section-header"><h2><i class="fa fa-palette"></i> Aparência</h2></div>
+      <div class="table-card" style="padding:24px;display:flex;flex-direction:column;gap:16px">
+        <div style="display:grid; grid-template-columns: 1fr 1fr 1fr; gap: 15px;">
+            <div class="form-group"><label>Primária</label><input type="color" id="ap-primary" style="height:45px"></div>
+            <div class="form-group"><label>Acento</label><input type="color" id="ap-secondary" style="height:45px"></div>
+            <div class="form-group"><label>Fundo</label><input type="color" id="ap-bg" style="height:45px"></div>
+        </div>
+        <div class="form-group"><label>URL Logo</label><input id="ap-logo" type="text"></div>
+        <button class="btn btn-primary" onclick="saveAppearance()">Aplicar</button>
+      </div>
+    </div>
+
+    <div class="section" id="section-settings">
+      <div class="section-header"><h2>Configurações</h2></div>
+      <div class="table-card" style="padding:24px;display:flex;flex-direction:column;gap:16px">
+        <div class="form-group"><label>Nome</label><input id="cfg-name"></div>
+        <div class="form-group"><label>Subtítulo</label><input id="cfg-subtitle"></div>
+        <button class="btn btn-success" onclick="saveSettings()">Salvar</button>
+      </div>
+    </div>
+
+    <div class="section" id="section-reports">
+      <div class="section-header"><h2><i class="fa fa-chart-line"></i> Relatórios Gerenciais</h2></div>
+      
+      <div class="table-card" style="padding:20px;margin-bottom:20px">
+        <div class="filter-bar" style="border:none;padding:0;display:flex;align-items:flex-end;gap:12px;flex-wrap:wrap">
+            <div class="form-group" style="flex:1;min-width:150px;margin:0"><label>Início</label><input type="date" id="r-start"></div>
+            <div class="form-group" style="flex:1;min-width:150px;margin:0"><label>Fim</label><input type="date" id="r-end"></div>
+            <button class="btn btn-primary" onclick="loadMainReport()"><i class="fa fa-search"></i> Pesquisar</button>
+            <button class="btn btn-neutral" onclick="setRptToday()">Hoje</button>
+        </div>
+      </div>
+
+      <div class="stats-grid">
+        <div class="stat-card"><div class="sv" id="r-total">0</div><div class="sl">Total Chamadas</div></div>
+        <div class="stat-card"><div class="sv" id="r-peak" style="font-size:1.6rem">--</div><div class="sl">Pico (Hora)</div></div>
+        <div class="stat-card"><div class="sv" id="r-peakday" style="font-size:1.6rem">--</div><div class="sl">Pico (Dia)</div></div>
+      </div>
+
+      <div class="charts-row" style="margin-bottom:20px">
+        <div class="chart-card"><h3><i class="fa fa-clock"></i> Por Hora</h3><canvas id="c-hour"></canvas></div>
+        <div class="chart-card"><h3><i class="fa fa-pie-chart"></i> Por Tipo</h3><canvas id="c-type"></canvas></div>
+      </div>
+
+      <div class="table-card" id="r-details" style="margin-bottom:20px">
+        <div style="padding:15px; border-bottom:1px solid var(--border); background:var(--glass); font-weight:600">Totais por Atendente e Guichê</div>
+        <div style="display:grid; grid-template-columns:1fr 1fr; gap:1px; background:var(--border)">
+            <div style="background:var(--surface); padding:15px" id="r-attendants"></div>
+            <div style="background:var(--surface); padding:15px" id="r-desks"></div>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<div class="modal-overlay hidden" id="modal">
+  <div class="modal-card">
+    <h3 id="modal-title">Modal</h3>
+    <div id="modal-body"></div>
+    <div class="modal-footer"><button class="btn btn-neutral" onclick="closeModal()">Sair</button><button class="btn btn-primary" onclick="modalConfirm()">Salvar</button></div>
+  </div>
+</div>
+
+<script>
+  let session = null;
+  let items = { types:[], guiches:[], users:[] };
+
+  function showMessage(msg, type = 'info') {
+    const container = document.getElementById('toast-container');
+    const toast = document.createElement('div');
+    toast.className = `toast ${type}`;
+    const icon = type === 'error' ? 'fa-circle-xmark' : (type === 'success' ? 'fa-circle-check' : 'fa-info-circle');
+    toast.innerHTML = `<i class="fa ${icon}"></i> <span>${msg}</span>`;
+    container.appendChild(toast);
+    setTimeout(() => { toast.style.animation = 'toastZoomOut 0.3s ease forwards'; setTimeout(() => toast.remove(), 300); }, 3000);
+  }
+
+  async function init() {
+    session = JSON.parse(localStorage.getItem('sa_session') || '{}');
+    if(!session?.token) { window.location='/login'; return; }
+    try {
+        const res = await fetch('/api/status', {headers:{'Authorization':'Bearer '+session.token}});
+        if(res.status === 401) { logout(); return; }
+        const st = await res.json();
+        if(st.tenant) {
+            document.getElementById('ap-primary').value = st.tenant.primary || "#4f6ef7";
+            document.getElementById('ap-secondary').value = st.tenant.secondary || "#00e5a0";
+            document.getElementById('ap-bg').value = st.tenant.bg || "#0c0f16";
+            document.getElementById('ap-logo').value = st.tenant.logo || "";
+            document.getElementById('cfg-name').value = st.system_name || "";
+            document.getElementById('cfg-subtitle').value = st.system_subtitle || "";
+        }
+    } catch(e) { console.error('Status fetch error:', e); }
+    document.getElementById('adm-user').textContent = session.user?.name || "Administrador";
+    loadDash(); loadTypes(); loadGuiches(); loadUsers();
+  }
+
+  let cHour = null, cType = null;
+
+  function showSection(n) {
+    document.querySelectorAll('.section').forEach(s=>s.classList.remove('active'));
+    document.querySelectorAll('.nav-item').forEach(i=>i.classList.remove('active'));
+    document.getElementById('section-'+n).classList.add('active');
+    document.getElementById('nav-'+n).classList.add('active');
+    if(n==='reports') { setRptToday(); loadMainReport(); }
+  }
+
+  function setRptToday() {
+    const t = new Date().toISOString().split('T')[0];
+    document.getElementById('r-start').value = t;
+    document.getElementById('r-end').value = t;
+  }
+
+  async function loadMainReport() {
+    const s = document.getElementById('r-start').value;
+    const e = document.getElementById('r-end').value;
+    if(!s||!e) return;
+    const res = await fetch(`/api/reports/summary?start=${s}&end=${e}`, {headers:{'Authorization':'Bearer '+session.token}});
+    if(res.ok) {
+        const d = await res.json();
+        document.getElementById('r-total').textContent = d.total;
+        
+        // Atendentes
+        document.getElementById('r-attendants').innerHTML = '<strong>Atendentes</strong><br>' + Object.entries(d.by_attendant).sort((a,b)=>b[1]-a[1]).map(([k,v])=>`<div style="display:flex;justify-content:space-between;font-size:0.85rem;margin-top:5px"><span>${k}</span><b>${v}</b></div>`).join('');
+        
+        // Guichês
+        document.getElementById('r-desks').innerHTML = '<strong>Guichês</strong><br>' + Object.entries(d.by_guiche).sort((a,b)=>b[1]-a[1]).map(([k,v])=>`<div style="display:flex;justify-content:space-between;font-size:0.85rem;margin-top:5px"><span>${k}</span><b>${v}</b></div>`).join('');
+
+        // Picos
+        const peakH = Object.entries(d.by_hour).sort((a,b)=>b[1]-a[1])[0];
+        document.getElementById('r-peak').textContent = peakH ? `${peakH[0]}h` : '--';
+        const peakD = Object.entries(d.by_weekday).sort((a,b)=>b[1]-a[1])[0];
+        document.getElementById('r-peakday').textContent = peakD ? peakD[0] : '--';
+
+        renderCharts(d);
+    }
+  }
+
+  function renderCharts(d) {
+    const hours = Array.from({length:24},(_,i)=>String(i));
+    const hData = hours.map(h => d.by_hour[h]||0);
+
+    if(cHour) cHour.destroy();
+    cHour = new Chart(document.getElementById('c-hour'), {
+        type:'bar',
+        data:{ labels: hours.map(h=>h+'h'), datasets:[{label:'Chamadas', data:hData, backgroundColor:'rgba(79,110,247,0.7)', borderRadius:4}] },
+        options:{ plugins:{legend:{display:false}}, scales:{y:{beginAtZero:true, grid:{color:'rgba(255,255,255,0.05)'}}, x:{grid:{display:false}}} }
+    });
+
+    if(cType) cType.destroy();
+    cType = new Chart(document.getElementById('c-type'), {
+        type:'doughnut',
+        data:{ labels: Object.keys(d.by_type), datasets:[{data:Object.values(d.by_type), backgroundColor:['#4f6ef7','#00e5a0','#f5a623','#9b59b6','#f03e3e'], borderWidth:0}] },
+        options:{ plugins:{legend:{position:'bottom', labels:{color:'#6c7693', font:{size:11}}}} }
+    });
+  }
+
+  async function loadDash() {
+    const d = new Date().toISOString().split('T')[0];
+    const res = await fetch(`/api/reports/summary?start=${d}&end=${d}`, {headers:{'Authorization':'Bearer '+session.token}});
+    if(res.ok) { const data = await res.json(); document.getElementById('stat-total').textContent = data.total; document.getElementById('stat-active').textContent = Object.keys(data.by_guiche).length; }
+  }
+
+  async function loadTypes() {
+    console.log('loading types...');
+    const res = await fetch('/api/admin/types', {headers:{'Authorization':'Bearer '+session.token}});
+    if(res.status === 401) { logout(); return; }
+    const data = await res.json();
+    if(!Array.isArray(data)) return;
+    items.types = data;
+    document.getElementById('types-tbody').innerHTML = items.types.map((t,i)=>`<tr><td><strong>${t.code}</strong></td><td>${t.name}</td><td><i class="fa ${t.icon}"></i></td><td>${t.priority}</td><td><span class="badge ${t.active?'badge-active':'badge-inactive'}">${t.active?'Ativo':'Inativo'}</span></td><td class="actions"><button class="btn-icon" onclick="openTypeModal(${i})"><i class="fa fa-pen"></i></button></td></tr>`).join('');
+  }
+
+  async function loadGuiches() {
+    try {
+      const res = await fetch('/api/admin/guiches', {headers:{'Authorization':'Bearer '+session.token}});
+      const data = await res.json();
+      if (!Array.isArray(data)) throw new Error('Dados inválidos');
+      items.guiches = data;
+      document.getElementById('guiches-tbody').innerHTML = items.guiches.map((g,i)=>`<tr><td>${g.id}</td><td>${g.name}</td><td><span class="badge ${g.active?'badge-active':'badge-inactive'}">${g.active?'Ativo':'Inativo'}</span></td><td class="actions"><button class="btn-icon" onclick="openGuicheModal(${i})"><i class="fa fa-pen"></i></button></td></tr>`).join('');
+    } catch(e) { console.error(e); showMessage('Erro ao carregar guichês', 'error'); }
+  }
+
+  async function loadUsers() {
+    try {
+      const res = await fetch('/api/admin/users', {headers:{'Authorization':'Bearer '+session.token}});
+      const data = await res.json();
+      if (!Array.isArray(data)) throw new Error('Dados inválidos');
+      items.users = data;
+      document.getElementById('users-tbody').innerHTML = items.users.map((u,i)=>`<tr><td>${u.name}</td><td><code>${u.username}</code></td><td>${u.role}</td><td class="actions"><button class="btn-icon" onclick="openUserModal(${i})"><i class="fa fa-pen"></i></button></td></tr>`).join('');
+    } catch(e) { console.error(e); showMessage('Erro ao carregar usuários', 'error'); }
+  }
+
+  function openTypeModal(idx=null) {
+    const t = idx!==null?items.types[idx]:null;
+    const commonIcons = [
+        'fa-ticket', 'fa-users', 'fa-user', 'fa-briefcase', 'fa-credit-card', 
+        'fa-hand-holding-medical', 'fa-person-walking-with-cane', 'fa-wheelchair',
+        'fa-graduation-cap', 'fa-money-bill', 'fa-envelope', 'fa-phone', 
+        'fa-truck', 'fa-heart', 'fa-star', 'fa-gear', 'fa-globe', 'fa-circle-info',
+        'fa-clock', 'fa-calendar', 'fa-file-invoice', 'fa-id-card', 'fa-hospital'
+    ];
+    
+    document.getElementById('modal-title').textContent = t?'Editar Tipo':'Novo Tipo';
+    document.getElementById('modal-body').innerHTML=`
+      <div class="form-row">
+        <div class="form-group"><label>Letra (Cód)</label><input id="f-code" value="${t?.code||''}" maxlength="1" placeholder="Ex: N" style="text-transform:uppercase"></div>
+        <div class="form-group"><label>Nome</label><input id="f-name" value="${t?.name||''}" placeholder="Ex: Normal"></div>
+      </div>
+      <div class="form-row">
+        <div class="form-group"><label>Cor</label><input type="color" id="f-color" value="${t?.color||'#4f6ef7'}" style="height:45px; cursor:pointer"></div>
+        <div class="form-group"><label>Prioridade</label><input type="number" id="f-prio" value="${t?.priority||0}"></div>
+      </div>
+      <div class="form-group">
+        <label>Ícone Selecionado</label>
+        <div style="display:flex; align-items:center; gap:12px; margin-bottom:12px">
+            <div id="icon-preview" style="width:52px; height:52px; background:var(--glass); border-radius:12px; display:flex; align-items:center; justify-content:center; font-size:1.6rem; color:var(--primary); border:1px solid var(--border)">
+                <i class="fa ${t?.icon||'fa-ticket'}"></i>
+            </div>
+            <input id="f-icon" type="hidden" value="${t?.icon||'fa-ticket'}">
+            <div style="display:flex; flex-direction:column">
+                <span style="font-size:0.9rem; font-weight:600">Seletor Visual</span>
+                <span style="font-size:0.8rem; color:var(--muted)">Clique em um ícone abaixo</span>
+            </div>
+        </div>
+        <div class="icon-grid">
+            ${commonIcons.map(icon => `
+                <div class="icon-item ${t?.icon===icon || (!t && icon==='fa-ticket') ? 'selected' : ''}" onclick="selectIcon('${icon}', this)">
+                    <i class="fa ${icon}"></i>
+                </div>
+            `).join('')}
+        </div>
+      </div>
+      <div class="form-group" style="display:flex; align-items:center; gap:10px; margin-top:10px; background:var(--glass); padding:12px; border-radius:10px">
+        <input type="checkbox" id="f-active" ${t?.active!==false?'checked':''} style="width:20px; height:20px; cursor:pointer">
+        <label for="f-active" style="margin-bottom:0; cursor:pointer">Tipo de Senha Ativo</label>
+      </div>
+    `;
+
+    window.selectIcon = (iconName, el) => {
+        document.getElementById('f-icon').value = iconName;
+        document.getElementById('icon-preview').innerHTML = `<i class="fa ${iconName}"></i>`;
+        document.querySelectorAll('.icon-item').forEach(x => x.classList.remove('selected'));
+        el.classList.add('selected');
+    };
+
+    window._modalAction = async () => {
+      const body = { 
+          code:document.getElementById('f-code').value, 
+          name:document.getElementById('f-name').value, 
+          color:document.getElementById('f-color').value, 
+          icon:document.getElementById('f-icon').value, 
+          priority:parseInt(document.getElementById('f-prio').value), 
+          active:document.getElementById('f-active').checked 
+      };
+      const url = t ? `/api/admin/types?type_id=${t.id}` : '/api/admin/types';
+      const res = await fetch(url, {
+          method:'POST', 
+          headers:{'Authorization':'Bearer '+session.token,'Content-Type':'application/json'}, 
+          body:JSON.stringify(body)
+      });
+      if(res.ok) { closeModal(); loadTypes(); showMessage('Tipo salvo!', 'success'); } 
+      else { 
+          const err = await res.json();
+          showMessage(err.detail || 'Erro ao salvar', 'error'); 
+      }
+    };
+    document.getElementById('modal').classList.remove('hidden');
+  }
+
+  function openGuicheModal(idx=null) {
+    const g = idx!==null?items.guiches[idx]:null;
+    document.getElementById('modal-title').textContent = g?'Editar':'Novo';
+    document.getElementById('modal-body').innerHTML = `
+        <div class="form-group"><label>Nome do Guichê</label><input id="f-gname" value="${g?.name||''}" placeholder="Ex: Guichê 01"></div>
+        <div class="form-group" style="display:flex; align-items:center; gap:10px; background:var(--glass); padding:12px; border-radius:10px">
+            <input type="checkbox" id="f-gactive" ${g?.active!==false?'checked':''} style="width:20px; height:20px; cursor:pointer">
+            <label for="f-gactive" style="margin-bottom:0; cursor:pointer">Guichê Ativo</label>
+        </div>
+    `;
+    window._modalAction = async () => {
+        const url = g ? `/api/admin/guiches?guiche_id=${g.id}` : '/api/admin/guiches';
+        const body = { name: document.getElementById('f-gname').value, active: document.getElementById('f-gactive').checked };
+        const res = await fetch(url, {method:'POST', headers:{'Authorization':'Bearer '+session.token,'Content-Type':'application/json'}, body:JSON.stringify(body)});
+        if(res.ok) { closeModal(); loadGuiches(); showMessage('Guichê salvo!', 'success'); } else { const e = await res.json(); showMessage(e.detail, 'error'); }
+    }
+    document.getElementById('modal').classList.remove('hidden');
+  }
+
+  function openUserModal(idx=null) {
+    const u = idx!==null?items.users[idx]:null;
+    document.getElementById('modal-title').textContent = u?'Editar':'Novo';
+    document.getElementById('modal-body').innerHTML = `
+        <div class="form-group"><label>Nome</label><input id="f-uname" value="${u?.name||''}"></div>
+        <div class="form-group"><label>User</label><input id="f-uuser" value="${u?.username||''}"></div>
+        <div class="form-group"><label>Senha</label><input type="password" id="f-upass" placeholder="${u?'Deixe vazio para manter':''}"></div>
+        <div class="form-group">
+            <label>Perfil</label>
+            <select id="f-urole">
+                <option value="operator">Operador</option>
+                <option value="admin">Administrador</option>
+                <option value="kiosk">Totem (Kiosk)</option>
+            </select>
+        </div>
+        <div class="form-group" style="display:flex; align-items:center; gap:10px; background:var(--glass); padding:12px; border-radius:10px">
+            <input type="checkbox" id="f-uactive" ${u?.active!==false?'checked':''} style="width:20px; height:20px; cursor:pointer">
+            <label for="f-uactive" style="margin-bottom:0; cursor:pointer">Usuário Ativo</label>
+        </div>
+    `;
+    if(u) document.getElementById('f-urole').value = u.role;
+    window._modalAction = async () => {
+        const body = { 
+            name:document.getElementById('f-uname').value, 
+            username:document.getElementById('f-uuser').value, 
+            password:document.getElementById('f-upass').value, 
+            role:document.getElementById('f-urole').value,
+            active:document.getElementById('f-uactive').checked
+        };
+        const url = u ? `/api/admin/users?user_id=${u.id}` : '/api/admin/users';
+        const res = await fetch(url, {method:'POST', headers:{'Authorization':'Bearer '+session.token,'Content-Type':'application/json'}, body:JSON.stringify(body)});
+        if(res.ok) { closeModal(); loadUsers(); showMessage('Usuário salvo!', 'success'); } else { const e = await res.json(); showMessage(e.detail, 'error'); }
+    }
+    document.getElementById('modal').classList.remove('hidden');
+  }
+
+  async function saveAppearance() {
+      const data = { primary_color:document.getElementById('ap-primary').value, secondary_color:document.getElementById('ap-secondary').value, bg_color:document.getElementById('ap-bg').value, logo_url:document.getElementById('ap-logo').value };
+      const res = await fetch('/api/admin/appearance', {method:'PUT', headers:{'Authorization':'Bearer '+session.token,'Content-Type':'application/json'}, body:JSON.stringify(data)});
+      if(res.ok) showMessage('Aparência atualizada!', 'success');
+  }
+
+  function closeModal() { document.getElementById('modal').classList.add('hidden'); }
+  function modalConfirm() { if(window._modalAction) window._modalAction(); }
+  function logout() { localStorage.removeItem('sa_session'); window.location='/login'; }
+  init();
+</script>
+</body>
+</html>

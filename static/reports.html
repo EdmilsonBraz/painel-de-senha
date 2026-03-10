@@ -1,0 +1,250 @@
+<!DOCTYPE html>
+<html lang="pt-br">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Relatórios – Sistema de Atendimento</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;600;700;900&family=Oswald:wght@700&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+  <link rel="stylesheet" href="/static/style.css">
+  <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js"></script>
+</head>
+<body class="admin-layout">
+<div id="toast-container" class="toast-container"></div>
+<div class="reports-root">
+
+  <!-- Topbar -->
+  <div class="reports-topbar">
+    <div class="brand" id="rpt-brand">Relatórios</div>
+    <span id="rpt-user" style="color:var(--muted);font-size:.85rem;margin-left:auto"></span>
+    <a href="/terminal" class="btn btn-neutral btn-sm"><i class="fa fa-arrow-left"></i> Terminal</a>
+    <button class="btn btn-neutral btn-sm" onclick="logout()"><i class="fa fa-right-from-bracket"></i></button>
+  </div>
+
+  <div class="reports-body">
+
+    <!-- Filtro -->
+    <div class="filter-bar">
+      <div class="fg">
+        <label>Data Início</label>
+        <input type="date" id="f-start">
+      </div>
+      <div class="fg">
+        <label>Data Fim</label>
+        <input type="date" id="f-end">
+      </div>
+      <div style="display:flex;gap:8px;padding-bottom:0">
+        <button class="btn btn-primary" onclick="loadReport()"><i class="fa fa-search"></i> Pesquisar</button>
+        <button class="btn btn-neutral" onclick="setToday()"><i class="fa fa-calendar-day"></i> Hoje</button>
+        <button class="btn btn-neutral" onclick="setMonth()"><i class="fa fa-calendar"></i> Este Mês</button>
+      </div>
+    </div>
+
+    <!-- Cards resumo -->
+    <div class="summary-cards" id="summary-cards">
+      <div class="sc"><div class="sv" id="sc-total">—</div><div class="sl">Total de Chamadas</div></div>
+      <div class="sc" id="sc-types"></div>
+      <div class="sc" id="sc-guiches"></div>
+      <div class="sc"><div class="sv" id="sc-peak">—</div><div class="sl">Horário de Pico</div></div>
+    </div>
+
+    <!-- Gráficos -->
+    <div class="charts-row">
+      <div class="chart-card">
+        <h3><i class="fa fa-clock"></i> Chamadas por Hora</h3>
+        <canvas id="chart-hour" height="200"></canvas>
+      </div>
+      <div class="chart-card">
+        <h3><i class="fa fa-pie-chart"></i> Por Tipo de Senha</h3>
+        <canvas id="chart-type" height="200"></canvas>
+      </div>
+    </div>
+
+    <!-- Tabela detalhada -->
+    <div class="table-card">
+      <div style="padding:16px 20px;display:flex;align-items:center;justify-content:space-between;border-bottom:1px solid var(--border)">
+        <h3 style="font-size:1rem;font-weight:600"><i class="fa fa-list"></i> Registros Detalhados</h3>
+        <span id="tbl-count" style="color:var(--muted);font-size:.85rem">—</span>
+      </div>
+      <div style="overflow-x:auto">
+        <table class="data-table">
+          <thead>
+            <tr>
+              <th>Senha</th><th>Tipo</th><th>Guichê</th><th>Atendente</th><th>Data</th><th>Hora</th>
+            </tr>
+          </thead>
+          <tbody id="tbl-body">
+            <tr><td colspan="6" style="text-align:center;color:var(--muted);padding:40px">
+              Selecione o período e clique em Pesquisar
+            </td></tr>
+          </tbody>
+        </table>
+      </div>
+      <div class="pagination" id="pagination"></div>
+    </div>
+
+  </div>
+</div>
+
+<script>
+  let chartHour = null, chartType = null;
+  let currentPage = 1, totalPages = 1;
+
+  function showMessage(msg, type = 'info') {
+    const container = document.getElementById('toast-container');
+    const toast = document.createElement('div');
+    toast.className = `toast ${type}`;
+    const icon = type === 'error' ? 'fa-circle-xmark' : (type === 'success' ? 'fa-circle-check' : 'fa-info-circle');
+    toast.innerHTML = `<i class="fa ${icon}"></i> <span>${msg}</span>`;
+    container.appendChild(toast);
+    setTimeout(() => { toast.style.animation = 'toastZoomOut 0.3s ease forwards'; setTimeout(() => toast.remove(), 300); }, 3000);
+  }
+
+  function getAuth() {
+    try { return JSON.parse(localStorage.getItem('sa_session')||'{}'); } catch(e){return {};}
+  }
+  function authH() { return {'Authorization':'Bearer '+getAuth().token}; }
+  function logout() { localStorage.removeItem('sa_session'); window.location='/login'; }
+
+  async function init() {
+    const s = getAuth();
+    if(!s?.token) { window.location='/login'; return; }
+    const r = await fetch('/api/auth/me',{headers:authH()});
+    if(!r.ok) { logout(); return; }
+    document.getElementById('rpt-user').textContent = '👤 ' + (s.user?.name||'');
+
+    const status = await fetch('/api/status').then(r=>r.json());
+    if(status.system_name) document.getElementById('rpt-brand').textContent = status.system_name + ' – Relatórios';
+
+    setToday();
+    loadReport();
+  }
+
+  function setToday() {
+    const t = new Date().toISOString().slice(0,10);
+    document.getElementById('f-start').value = t;
+    document.getElementById('f-end').value   = t;
+  }
+
+  function setMonth() {
+    const now   = new Date();
+    const start = new Date(now.getFullYear(), now.getMonth(), 1).toISOString().slice(0,10);
+    const end   = now.toISOString().slice(0,10);
+    document.getElementById('f-start').value = start;
+    document.getElementById('f-end').value   = end;
+  }
+
+  async function loadReport(page=1) {
+    currentPage = page;
+    const start = document.getElementById('f-start').value;
+    const end   = document.getElementById('f-end').value;
+    if(!start||!end) return;
+
+    const [summary, calls] = await Promise.all([
+      fetch(`/api/reports/summary?start=${start}&end=${end}`,{headers:authH()}).then(r=>r.json()),
+      fetch(`/api/reports/calls?start=${start}&end=${end}&page=${page}&size=50`,{headers:authH()}).then(r=>r.json()),
+    ]);
+
+    renderSummary(summary);
+    renderCharts(summary);
+    renderTable(calls);
+    totalPages = calls.pages || 1;
+    renderPagination(start, end);
+  }
+
+  function renderSummary(d) {
+    document.getElementById('sc-total').textContent = d.total || 0;
+
+    // Por tipo
+    const byType  = d.by_type  || {};
+    const typeHtml = Object.entries(byType).map(([k,v])=>`<div style="display:flex;justify-content:space-between;margin-bottom:4px"><span style="font-size:.85rem">${k}</span><strong>${v}</strong></div>`).join('') || '<span style="color:var(--muted)">Nenhum dado</span>';
+    document.getElementById('sc-types').innerHTML  = `<div class="sl" style="margin-bottom:10px">Por Tipo</div>${typeHtml}`;
+
+    // Por guichê
+    const byG   = d.by_guiche || {};
+    const gHtml = Object.entries(byG).map(([k,v])=>`<div style="display:flex;justify-content:space-between;margin-bottom:4px"><span style="font-size:.85rem">${k}</span><strong>${v}</strong></div>`).join('') || '<span style="color:var(--muted)">Nenhum dado</span>';
+    document.getElementById('sc-guiches').innerHTML = `<div class="sl" style="margin-bottom:10px">Por Guichê</div>${gHtml}`;
+
+    // Horário de pico
+    const byH = d.by_hour || {};
+    const peak = Object.entries(byH).sort((a,b)=>b[1]-a[1])[0];
+    document.getElementById('sc-peak').textContent = peak ? `${String(peak[0]).padStart(2,'0')}h (${peak[1]} calls)` : '—';
+  }
+
+  function renderCharts(d) {
+    const byHour = d.by_hour || {};
+    const hours  = Array.from({length:24},(_,i)=> String(i));
+    const hData  = hours.map(h => byHour[h]||0);
+
+    if(chartHour) chartHour.destroy();
+    chartHour = new Chart(document.getElementById('chart-hour'), {
+      type: 'bar',
+      data: {
+        labels: hours.map(h => h.padStart(2,'0')+'h'),
+        datasets:[{
+          label: 'Chamadas',
+          data: hData,
+          backgroundColor: 'rgba(79,110,247,.7)',
+          borderColor: 'rgba(79,110,247,1)',
+          borderWidth: 1, borderRadius: 4
+        }]
+      },
+      options: {
+        plugins:{legend:{display:false}},
+        scales:{
+          x:{ticks:{color:'#6c7693',font:{size:10}},grid:{color:'rgba(255,255,255,.04)'}},
+          y:{ticks:{color:'#6c7693'},grid:{color:'rgba(255,255,255,.04)'},beginAtZero:true}
+        }
+      }
+    });
+
+    const byType = d.by_type || {};
+    if(chartType) chartType.destroy();
+    const colors = ['#4f6ef7','#00e5a0','#f5a623','#9b59b6','#f03e3e','#22c55e'];
+    chartType = new Chart(document.getElementById('chart-type'), {
+      type: 'doughnut',
+      data: {
+        labels: Object.keys(byType),
+        datasets:[{data: Object.values(byType), backgroundColor: colors, borderWidth:0, hoverOffset:6}]
+      },
+      options: {
+        cutout:'65%',
+        plugins:{legend:{labels:{color:'#e8eaf0',font:{size:12}}}}
+      }
+    });
+  }
+
+  function renderTable(data) {
+    const body = document.getElementById('tbl-body');
+    document.getElementById('tbl-count').textContent = `${data.total} registros`;
+    if(!data.data?.length) {
+      body.innerHTML = '<tr><td colspan="6" style="text-align:center;color:var(--muted);padding:40px">Nenhum registro encontrado</td></tr>';
+      return;
+    }
+    body.innerHTML = data.data.map(r => `
+      <tr>
+        <td><strong>${r.password}</strong></td>
+        <td>${r.type}</td>
+        <td>${r.guiche}</td>
+        <td>${r.user}</td>
+        <td>${r.date}</td>
+        <td>${r.time}</td>
+      </tr>`).join('');
+  }
+
+  function renderPagination(start, end) {
+    const pg = document.getElementById('pagination');
+    if(totalPages <= 1) { pg.innerHTML=''; return; }
+    let html = '';
+    for(let i=1; i<=Math.min(totalPages,10); i++) {
+      html += `<button class="${i===currentPage?'active':''}" onclick="loadReport(${i})">${i}</button>`;
+    }
+    if(totalPages > 10) html += `<span style="color:var(--muted);padding:8px">... ${totalPages} páginas</span>`;
+    pg.innerHTML = html;
+  }
+
+  init();
+</script>
+</body>
+</html>

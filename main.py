@@ -6,10 +6,11 @@ from sqlalchemy.orm import Session
 from passlib.context import CryptContext
 from jose import JWTError, jwt
 from datetime import datetime, timedelta
-from typing import Optional, Dict, List
+from typing import Optional, Dict, List, Any
 from pydantic import BaseModel
 import socketio
 import os
+import time
 
 from database import (
     get_db, User, TicketType, Guiche, Setting, CallRecord, Tenant, Plan,
@@ -24,7 +25,7 @@ TOKEN_HOURS = 24
 pwd_context = CryptContext(schemes=["bcrypt"], deprecated="auto")
 security    = HTTPBearer(auto_error=False)
 
-app = FastAPI(title="SaaS Queue System", version="4.0")
+app = FastAPI(title="SwiftQ", version="5.0")
 sio = socketio.AsyncServer(async_mode='asgi', cors_allowed_origins='*')
 socket_app = socketio.ASGIApp(sio, app)
 
@@ -101,7 +102,7 @@ class TenantUpdate(BaseModel): name: Optional[str] = None; plan_id: Optional[int
 class UserSuperUpdate(BaseModel): name: Optional[str] = None; username: Optional[str] = None; password: Optional[str] = None; role: Optional[str] = None; active: Optional[bool] = None
 class UserCreate(BaseModel): name: str; username: str; password: str; role: str; tenant_id: Optional[int] = None; active: bool = True
 class AppearanceUpdate(BaseModel): primary_color: str; secondary_color: str; bg_color: str; logo_url: Optional[str] = None
-class TypeUpdate(BaseModel): name: str; code: str; color: str; icon: str; priority: int; active: bool
+class TypeUpdate(BaseModel): name: str; code: str; color: str; icon: str; priority: int; active: bool; priority_guiches: Optional[str] = None
 
 # ── Public Routes (Tenant-Specific) ──────────────────────────────────────────
 @app.get("/api/{slug}/status")
@@ -117,23 +118,40 @@ async def get_tenant_status(slug: str, db: Session = Depends(get_db)):
         "history": history[:8],
         "last_called": history[0] if history else None,
         "system_name": cfg.get("system_name", t.name),
-        "system_subtitle": cfg.get("system_subtitle", "")
+        "system_subtitle": cfg.get("system_subtitle", ""),
+        "config": cfg
     }
 
 @app.post("/api/{slug}/generate/{ticket_type}")
 async def generate_password(slug: str, ticket_type: str, db: Session = Depends(get_db)):
     t = get_tenant_by_slug(slug, db)
     code = ticket_type.upper()
+    tt = db.query(TicketType).filter(TicketType.tenant_id == t.id, TicketType.code == code).first()
+    if not tt: raise HTTPException(400, "Tipo inválido")
+    
     q_map, c_map, _ = get_tenant_queues(t.id)
     if code not in q_map:
-        tt = db.query(TicketType).filter(TicketType.tenant_id == t.id, TicketType.code == code).first()
-        if not tt: raise HTTPException(400, "Tipo inválido")
         q_map[code] = []; c_map[code] = 1
+    
     password = f"{code}{c_map[code]:03d}"
     c_map[code] += 1
-    q_map[code].append(password)
+    q_map[code].append({"p": password, "t": time.time()})
     await sio.emit(f"new_password_{t.id}", {"type": code, "count": len(q_map[code])})
-    return {"password": password, "queue_size": len(q_map[code])}
+    
+    cfg = {s.key: s.value for s in db.query(Setting).filter(Setting.tenant_id == t.id).all()}
+    system_name = cfg.get("system_name", t.name)
+    system_subtitle = cfg.get("system_subtitle", "")
+    now = datetime.now()
+
+    return {
+        "password": password, 
+        "queue_size": len(q_map[code]),
+        "tenant_name": system_name,
+        "system_subtitle": system_subtitle,
+        "type_name": tt.name,
+        "date": now.strftime("%d/%m/%Y"),
+        "time": now.strftime("%H:%M:%S")
+    }
 
 # ── Auth ─────────────────────────────────────────────────────────────────────
 @app.post("/api/auth/login")
@@ -152,6 +170,7 @@ def get_my_status(user: User = Depends(get_current_user), db: Session = Depends(
     q_map, _, history = get_tenant_queues(t.id)
     types = db.query(TicketType).filter(TicketType.tenant_id == t.id, TicketType.active == True).order_by(TicketType.priority.desc()).all()
     cfg   = {s.key: s.value for s in db.query(Setting).filter(Setting.tenant_id == t.id).all()}
+    print(f"DEBUG: Status para Tenant {t.id} - system_name no DB: {cfg.get('system_name')}")
     return {
         "tenant": {"id": t.id, "name": t.name, "primary": t.primary_color, "secondary": t.secondary_color, "bg": t.bg_color, "logo": t.logo_url},
         "queues": {k: len(v) for k, v in q_map.items()},
@@ -173,12 +192,35 @@ async def call_next_tenant(terminal: str, type: Optional[str] = None, user: User
     tid = user.tenant_id
     q_map, _, history = get_tenant_queues(tid)
     target = type.upper() if type else None
+    
     if not target:
-        types = db.query(TicketType).filter(TicketType.tenant_id == tid, TicketType.active == True).order_by(TicketType.priority.desc()).all()
-        for tt in types:
-            if q_map.get(tt.code): target = tt.code; break
+        # 1. Buscar tipos que têm este terminal como prioridade
+        priority_types = db.query(TicketType).filter(TicketType.tenant_id == tid, TicketType.active == True, TicketType.priority_guiches.like(f"%{terminal}%")).all()
+        candidate_tickets = []
+        for pt in priority_types:
+            if q_map.get(pt.code):
+                candidate_tickets.append({"code": pt.code, "ticket": q_map[pt.code][0]})
+        
+        # 2. Se houver tickets de prioridade, pegar o mais antigo entre eles (FIFO entre prioridades)
+        if candidate_tickets:
+            candidate_tickets.sort(key=lambda x: x["ticket"]["t"])
+            target = candidate_tickets[0]["code"]
+        else:
+            # 3. Fallback: Pegar o ticket mais antigo de TODOS os tipos (Global FIFO)
+            all_candidates = []
+            for code, queue in q_map.items():
+                if queue:
+                    all_candidates.append({"code": code, "ticket": queue[0]})
+            
+            if all_candidates:
+                all_candidates.sort(key=lambda x: x["ticket"]["t"])
+                target = all_candidates[0]["code"]
+
     if not target or not q_map.get(target): return {"error": "Fila vazia"}
-    password = q_map[target].pop(0); tt_obj = db.query(TicketType).filter(TicketType.tenant_id == tid, TicketType.code == target).first()
+    
+    t_obj = q_map[target].pop(0)
+    password = t_obj["p"]
+    tt_obj = db.query(TicketType).filter(TicketType.tenant_id == tid, TicketType.code == target).first()
     call_data = {"password": password, "terminal": terminal, "user_name": user.name, "type": target, "label": tt_obj.name, "color": tt_obj.color, "time": datetime.now().strftime("%H:%M:%S")}
     history.insert(0, call_data)
     if len(history) > 30: history.pop()
@@ -310,7 +352,7 @@ def admin_create_type(req: TypeUpdate, type_id: Optional[int] = None, user: User
         if not tt: raise HTTPException(404, "Tipo não encontrado")
         old_code = tt.code
         new_code = req.code[:1].upper()
-        tt.code = new_code; tt.name = req.name; tt.color = req.color; tt.icon = req.icon; tt.priority = req.priority; tt.active = req.active
+        tt.code = new_code; tt.name = req.name; tt.color = req.color; tt.icon = req.icon; tt.priority = req.priority; tt.active = req.active; tt.priority_guiches = req.priority_guiches
         db.commit()
         if old_code != new_code:
             q, c, _ = get_tenant_queues(t.id)
@@ -321,21 +363,28 @@ def admin_create_type(req: TypeUpdate, type_id: Optional[int] = None, user: User
             active_count = db.query(TicketType).filter(TicketType.tenant_id == t.id, TicketType.active == True).count()
             if active_count >= t.plan.max_types: raise HTTPException(400, "Limite do plano atingido (Tipos de Senha ativos)")
         new_code = req.code[:1].upper()
-        tt = TicketType(tenant_id=t.id, code=new_code, name=req.name, color=req.color, icon=req.icon, priority=req.priority, active=req.active)
+        tt = TicketType(tenant_id=t.id, code=new_code, name=req.name, color=req.color, icon=req.icon, priority=req.priority, active=req.active, priority_guiches=req.priority_guiches)
         db.add(tt); db.commit(); db.refresh(tt)
         q, c, _ = get_tenant_queues(t.id); q[new_code] = []; c[new_code] = 1
         return tt
 
 @app.post("/api/admin/settings")
-def update_settings(data: Dict[str, str], user: User = Depends(get_current_user), db: Session = Depends(get_db)):
+def update_settings(data: Dict[str, Any], user: User = Depends(get_current_user), db: Session = Depends(get_db)):
     if user.role not in ['admin', 'superadmin', 'kiosk']: raise HTTPException(403)
     tid = user.tenant_id
     if not tid: raise HTTPException(403)
+    
+    print(f"Salvando configuracoes para Tenant {tid}: {data}")
     for k, v in data.items():
+        val = str(v) if v is not None else ""
         s = db.query(Setting).filter(Setting.tenant_id == tid, Setting.key == k).first()
-        if s: s.value = v
-        else: db.add(Setting(tenant_id=tid, key=k, value=v))
-    db.commit(); return {"status": "ok"}
+        if s: 
+            s.value = val
+        else: 
+            db.add(Setting(tenant_id=tid, key=k, value=val))
+        print(f"Salvo chave {k} com valor {val}")
+    db.commit()
+    return {"status": "ok"}
 
 @app.delete("/api/reset")
 async def reset_queues_all(user: User = Depends(require_admin)):

@@ -3,7 +3,8 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>Painel – Sistema de Atendimento</title>
+  <title>Painel – SwiftQ</title>
+  <link rel="icon" type="image/png" href="/static/favicon.png">
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;700;900&family=Oswald:wght@700&display=swap" rel="stylesheet">
   <link rel="stylesheet" href="/static/style.css">
@@ -12,15 +13,20 @@
 <body id="dynamic-body">
 <div id="panel-root">
   <div id="panel-body">
-    <main class="call-card" id="call-card">
-      <div class="lbl" id="lbl-top">AGUARDANDO CHAMADA</div>
-      <div class="pw"  id="current-pw">----</div>
-      <div class="tb"  id="current-tb">―</div>
-    </main>
-    <aside class="history-card">
-      <h2>Últimas Chamadas</h2>
-      <div id="history-list"></div>
-    </aside>
+    <div id="video-container" style="display:none">
+        <iframe id="video-player" width="100%" height="100%" src="" frameborder="0" allow="autoplay; muted" allowfullscreen></iframe>
+    </div>
+    <div id="side-panel" style="display: contents;">
+      <main class="call-card" id="call-card">
+        <div class="lbl" id="lbl-top">AGUARDANDO CHAMADA</div>
+        <div class="pw"  id="current-pw">----</div>
+        <div class="tb"  id="current-tb">―</div>
+      </main>
+      <aside class="history-card">
+        <h2>Últimas Chamadas</h2>
+        <div id="history-list"></div>
+      </aside>
+    </div>
   </div>
   <footer class="panel-footer">
     <div style="display:flex; align-items:center; gap:12px">
@@ -51,8 +57,14 @@
     setupVoices();
   }
 
+  function extractYouTubeID(url) {
+    const regExp = /^.*(youtu.be\/|v\/|u\/\w\/|embed\/|watch\?v=|\&v=)([^#\&\?]*).*/;
+    const match = url.match(regExp);
+    return (match && match[2].length === 11) ? match[2] : null;
+  }
+
   async function loadStatus() {
-    const r = await fetch(`/api/${slug}/status`);
+    const r = await fetch(`/api/${slug}/status`, {cache: 'no-store'});
     if(!r.ok) { document.body.innerHTML="<h1>Unidade não encontrada</h1>"; return; }
     const d = await r.json();
     
@@ -74,6 +86,43 @@
       logoImg.style.display = 'none';
     }
     document.title = d.system_name + ' – Painel';
+
+    const panelBody = document.getElementById('panel-body');
+    const sidePanel = document.getElementById('side-panel');
+    const videoContainer = document.getElementById('video-container');
+    const videoPlayer = document.getElementById('video-player');
+
+    if(d.config && d.config.panel_layout === 'video' && d.config.panel_video_url) {
+      panelBody.classList.add('layout-video');
+      sidePanel.style.display = 'flex';
+      videoContainer.style.display = 'block';
+      
+      const vID = extractYouTubeID(d.config.panel_video_url);
+      const targetVol = parseInt(d.config.panel_video_volume || '0', 10);
+      const muteParam = targetVol === 0 ? 1 : 0;
+
+      if(vID && videoPlayer.src.indexOf(vID) === -1) {
+          videoPlayer.src = `https://www.youtube.com/embed/${vID}?autoplay=1&mute=${muteParam}&loop=1&playlist=${vID}&controls=0&showinfo=0&rel=0&enablejsapi=1`;
+      }
+      
+      // Atualizar volume via API Message do iFrame do YouTube 
+      setTimeout(() => {
+        if(videoPlayer.contentWindow) {
+            if(targetVol > 0) {
+                videoPlayer.contentWindow.postMessage(JSON.stringify({event: 'command', func: 'unMute', args: []}), '*');
+                videoPlayer.contentWindow.postMessage(JSON.stringify({event: 'command', func: 'setVolume', args: [targetVol]}), '*');
+            } else {
+                videoPlayer.contentWindow.postMessage(JSON.stringify({event: 'command', func: 'mute', args: []}), '*');
+            }
+        }
+      }, 1500);
+
+    } else {
+      panelBody.classList.remove('layout-video');
+      sidePanel.style.display = 'contents';
+      videoContainer.style.display = 'none';
+      if(videoPlayer.src !== "") videoPlayer.src = "";
+    }
 
     if(d.last_called) {
       updateDisplay(d.last_called, true); // true para não falar o histórico ao carregar
@@ -113,16 +162,16 @@
     if(!silent) speak(d.password, d.terminal);
     
     if(!history.find(h => h.password === d.password && h.time === d.time)) {
-      history.unshift(d); if(history.length>8) history.pop();
+      history.unshift(d); if(history.length>12) history.pop();
       renderHistory();
     }
   }
 
   function renderHistory() {
     histEl.innerHTML = history.slice(1).map((item,i)=>`
-      <div class="hi" style="opacity:${Math.max(0.3, 1-i*0.15)};border-left-color:${item.color||'var(--primary)'}">
-        <div><div class="hp">${item.password}</div><div class="ht">${item.terminal}</div></div>
-        <div style="font-size:.75rem;color:var(--muted)">${item.time||''}</div>
+      <div class="hi" style="opacity:${Math.max(0.4, 1-i*0.1)}; border-left-color:${item.color||'var(--primary)'}">
+        <div class="hp">${item.password}</div>
+        <div class="ht">🖥 ${item.terminal}</div>
       </div>`).join('');
   }
 

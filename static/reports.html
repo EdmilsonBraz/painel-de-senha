@@ -3,7 +3,8 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>Relatórios – Sistema de Atendimento</title>
+  <title>Relatórios – SwiftQ</title>
+  <link rel="icon" type="image/png" href="/static/favicon.png">
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;600;700;900&family=Oswald:wght@700&display=swap" rel="stylesheet">
   <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
@@ -15,8 +16,11 @@
 <div class="reports-root">
 
   <!-- Topbar -->
-  <div class="reports-topbar">
-    <div class="brand" id="rpt-brand">Relatórios</div>
+    <div class="reports-topbar">
+      <div class="brand" id="rpt-brand">
+        <img src="/static/logo.png" alt="Logo" style="height:32px; width:auto; vertical-align:middle; margin-right:8px;">
+        <strong>Swift</strong>Q
+      </div>
     <span id="rpt-user" style="color:var(--muted);font-size:.85rem;margin-left:auto"></span>
     <a href="/terminal" class="btn btn-neutral btn-sm"><i class="fa fa-arrow-left"></i> Terminal</a>
     <button class="btn btn-neutral btn-sm" onclick="logout()"><i class="fa fa-right-from-bracket"></i></button>
@@ -90,6 +94,7 @@
 <script>
   let chartHour = null, chartType = null;
   let currentPage = 1, totalPages = 1;
+  let availableTypes = [];
 
   function showMessage(msg, type = 'info') {
     const container = document.getElementById('toast-container');
@@ -113,6 +118,8 @@
     const r = await fetch('/api/auth/me',{headers:authH()});
     if(!r.ok) { logout(); return; }
     document.getElementById('rpt-user').textContent = '👤 ' + (s.user?.name||'');
+
+    availableTypes = await fetch('/api/admin/types', {headers:authH()}).then(r=>r.json()).catch(()=>[]);
 
     const status = await fetch('/api/status').then(r=>r.json());
     if(status.system_name) document.getElementById('rpt-brand').textContent = status.system_name + ' – Relatórios';
@@ -201,12 +208,16 @@
 
     const byType = d.by_type || {};
     if(chartType) chartType.destroy();
-    const colors = ['#4f6ef7','#00e5a0','#f5a623','#9b59b6','#f03e3e','#22c55e'];
+    const typeLabels = Object.keys(byType);
+    const typeColors = typeLabels.map(code => {
+        const t = availableTypes.find(x => x.code === code || x.name === code);
+        return t ? t.color : '#4f6ef7';
+    });
     chartType = new Chart(document.getElementById('chart-type'), {
       type: 'doughnut',
       data: {
-        labels: Object.keys(byType),
-        datasets:[{data: Object.values(byType), backgroundColor: colors, borderWidth:0, hoverOffset:6}]
+        labels: typeLabels,
+        datasets:[{data: Object.values(byType), backgroundColor: typeColors, borderWidth:0, hoverOffset:6}]
       },
       options: {
         cutout:'65%',

@@ -32,8 +32,8 @@ class Tenant(Base):
     created_at  = Column(DateTime, default=datetime.now)
 
     # Cache de limites do plano (Opcional, mas vamos usar o relacionamento)
-    primary_color   = Column(String(20), default="#4f6ef7")
-    secondary_color = Column(String(20), default="#00e5a0")
+    primary_color   = Column(String(20), default="#3b82f6")
+    secondary_color = Column(String(20), default="#00d1ff")
     bg_color        = Column(String(20), default="#0c0f16")
     logo_url        = Column(String(500), nullable=True)
     
@@ -68,6 +68,7 @@ class TicketType(Base):
     color     = Column(String(20), default="#4f6ef7")
     icon      = Column(String(50), default="fa-ticket")
     priority  = Column(Integer, default=0)
+    priority_guiches = Column(String(200), nullable=True) # Lista de nomes de guichês separados por vírgula
     active    = Column(Boolean, default=True)
 
     tenant = relationship("Tenant", back_populates="ticket_types")

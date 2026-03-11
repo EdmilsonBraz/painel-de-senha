@@ -174,13 +174,24 @@
       
       // Attempt Print via Bridge
       if(config.kiosk_bridge_url) {
+          const t_name  = data.tenant_name ? data.tenant_name : "ATENDIMENTO";
+          const t_sub   = data.system_subtitle ? data.system_subtitle : "";
+          const p_type  = data.type_name ? data.type_name : "Senha";
+          const p_date  = data.date ? data.date : "";
+          const p_time  = data.time ? data.time : "";
+
           fetch(config.kiosk_bridge_url + '/print', {
               method: 'POST',
               headers: { 'Content-Type': 'application/json' },
               body: JSON.stringify({
-                  port: config.kiosk_printer_port || 'COM3',
+                  port: config.kiosk_printer_port || 'COM5',
                   baud: parseInt(config.kiosk_printer_baud || '9600'),
-                  content: `\n\n  ${data.tenant_name}\n  ========================\n\n      SENHA: ${data.password}\n\n  ${data.type_name}\n  ${data.date} ${data.time}\n\n  ========================\n\n\n\n\x1Dm\x01`
+                  tenant_name: t_name,
+                  system_subtitle: t_sub,
+                  password: data.password,
+                  type_name: p_type,
+                  date: p_date,
+                  time: p_time
               })
           }).catch(err => console.error("Bridge Error:", err));
       }

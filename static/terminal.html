@@ -3,7 +3,8 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>Terminal – Sistema de Atendimento</title>
+  <title>Terminal – SwiftQ</title>
+  <link rel="icon" type="image/png" href="/static/favicon.png">
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;600;700;900&family=Oswald:wght@700&display=swap" rel="stylesheet">
   <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
@@ -13,43 +14,58 @@
 <body class="terminal-root">
 <div id="toast-container" class="toast-container"></div>
 
-<div class="terminal-card">
-  <div class="term-header">
-    <div style="display:flex; align-items:center; justify-content:center; gap:12px; margin-bottom:10px">
-      <img id="brand-logo" src="" alt="" style="display:none; height:45px; width:auto; object-fit:contain; border-radius:8px">
-      <h1 id="sys-name" style="margin:0">Sistema de Atendimento</h1>
+<div class="terminal-container">
+  <!-- Sidebar de Status/Histórico -->
+  <aside class="term-sidebar">
+    <div class="term-header-mini">
+        <img id="brand-logo" src="/static/logo.png" alt="Logo" class="logo-mini">
+        <h2 id="sys-name"><strong>Swift</strong>Q</h2>
     </div>
-    <div class="sub" id="user-bar">Carregando...</div>
-  </div>
+    
+    <div class="user-info-card">
+        <div id="user-bar">Carregando...</div>
+    </div>
 
-  <!-- Botões de tipo dinâmicos -->
-  <div class="type-grid" id="type-grid"></div>
+    <div class="queue-monitor">
+        <h3><i class="fa fa-layer-group"></i> Monitor de Filas</h3>
+        <div class="queue-row" id="queue-row"></div>
+    </div>
 
-  <button class="tbn-auto" onclick="callNext()">
-    <i class="fa fa-angle-double-right"></i> &nbsp;CHAMAR PRÓXIMO
-  </button>
+    <div class="last-call-box">
+        <span class="tag">ÚLTIMA CHAMADA</span>
+        <div class="pw" id="lcb-pw">---</div>
+        <div class="info" id="lcb-tm">Aguardando...</div>
+    </div>
 
-  <div class="btn-row">
-    <button class="tbn-recall" onclick="recall()"><i class="fa fa-rotate-right"></i> &nbsp;Repetir Chamada</button>
-    <button class="tbn-absent" onclick="markAbsent()"><i class="fa fa-user-slash"></i> &nbsp;Marcar Ausente</button>
-  </div>
+    <div class="term-footer">
+        <span id="admin-link" style="display:none"><a href="/admin" class="footer-link"><i class="fa fa-gear"></i> Adm</a></span>
+        <a href="/reports" class="footer-link"><i class="fa fa-chart-bar"></i> Relatórios</a>
+        <a href="#" onclick="logout()" class="footer-link logout"><i class="fa fa-power-off"></i> Sair</a>
+    </div>
+  </aside>
 
-  <!-- Status das filas -->
-  <div class="queue-row" id="queue-row"></div>
+  <!-- Área Principal de Ação -->
+  <main class="term-main">
+    <div class="main-action">
+        <button class="call-giant-btn" onclick="callNext()">
+            <div class="btn-content">
+                <i class="fa fa-bullhorn"></i>
+                <span>CHAMAR PRÓXIMO</span>
+                <small>Clique aqui ou aperte ENTER</small>
+            </div>
+        </button>
+    </div>
 
-  <!-- Última chamada -->
-  <div class="lcb">
-    <div class="lcb-tag">Última chamada neste terminal</div>
-    <div class="lcb-pw" id="lcb-pw">---</div>
-    <div class="lcb-tm" id="lcb-tm">―</div>
-  </div>
-
-  <!-- Links -->
-  <div style="display:flex;justify-content:space-between;font-size:.8rem;color:var(--muted)">
-    <a href="/reports" style="color:var(--primary);text-decoration:none"><i class="fa fa-chart-bar"></i> Relatórios</a>
-    <span id="admin-link" style="display:none"><a href="/admin" style="color:var(--accent);text-decoration:none"><i class="fa fa-gear"></i> Administração</a></span>
-    <a href="#" onclick="logout()" style="color:var(--danger);text-decoration:none"><i class="fa fa-right-from-bracket"></i> Sair</a>
-  </div>
+    <div class="secondary-actions">
+        <div class="grid-label">Chamada por Tipo</div>
+        <div class="type-grid" id="type-grid"></div>
+        
+        <div class="utility-row">
+            <button class="util-btn recall" onclick="recall()"><i class="fa fa-redo"></i> Repetir</button>
+            <button class="util-btn absent" onclick="markAbsent()"><i class="fa fa-user-xmark"></i> Ausente</button>
+        </div>
+    </div>
+  </main>
 </div>
 
 <script>
@@ -98,6 +114,13 @@
     // Carrega status e tipos
     const res  = await fetch('/api/status', { headers: authH() });
     const data = await res.json();
+    
+    // Aplicar Cores do Tenant
+    const root = document.documentElement;
+    if(data.tenant?.primary)   root.style.setProperty('--primary', data.tenant.primary);
+    if(data.tenant?.secondary) root.style.setProperty('--accent',  data.tenant.secondary);
+    if(data.tenant?.bg)        root.style.setProperty('--bg',      data.tenant.bg);
+
     if(data.system_name) {
       document.getElementById('sys-name').textContent = data.system_name;
       const logoImg = document.getElementById('brand-logo');
@@ -213,6 +236,10 @@
     el.style.color = colors[level]; el.textContent = msg;
     setTimeout(()=>{ el.style.color=''; updateStatus(); }, 3000);
   }
+
+  window.addEventListener('keydown', e => {
+    if(e.key === 'Enter') callNext();
+  });
 
   setInterval(updateStatus, 6000);
   init();

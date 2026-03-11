@@ -3,7 +3,8 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>Administração – Sistema de Atendimento</title>
+  <title>Administração – SwiftQ</title>
+  <link rel="icon" type="image/png" href="/static/favicon.png">
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;600;700;900&family=Oswald:wght@700&display=swap" rel="stylesheet">
   <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
@@ -16,7 +17,10 @@
 
   <!-- Topbar -->
   <div class="admin-topbar">
-    <div class="brand" id="adm-brand">Administração</div>
+    <div class="brand" id="adm-brand">
+      <img src="/static/logo.png" alt="Logo" style="height:32px; width:auto; vertical-align:middle; margin-right:8px;">
+      <strong>Swift</strong>Q
+    </div>
     <span id="adm-user" style="font-size:.85rem;color:var(--muted)"></span>
     <div style="display:flex;gap:8px">
       <a href="/terminal" class="btn btn-neutral btn-sm"><i class="fa fa-desktop"></i> Terminal</a>
@@ -47,7 +51,7 @@
 
     <div class="section" id="section-types">
       <div class="section-header"><h2>Tipos de Senha</h2><button class="btn btn-primary btn-sm" onclick="openTypeModal()"><i class="fa fa-plus"></i> Novo Tipo</button></div>
-      <div class="table-card"><table class="data-table"><thead><tr><th>Cód</th><th>Nome</th><th>Ícone</th><th>Prio</th><th>Status</th><th>Ações</th></tr></thead><tbody id="types-tbody"></tbody></table></div>
+      <div class="table-card"><table class="data-table"><thead><tr><th>Cód</th><th>Nome</th><th>Ícone</th><th>Guichês Prioritários</th><th>Status</th><th>Ações</th></tr></thead><tbody id="types-tbody"></tbody></table></div>
     </div>
 
     <div class="section" id="section-guiches">
@@ -78,6 +82,11 @@
       <div class="table-card" style="padding:24px;display:flex;flex-direction:column;gap:16px">
         <div class="form-group"><label>Nome</label><input id="cfg-name"></div>
         <div class="form-group"><label>Subtítulo</label><input id="cfg-subtitle"></div>
+        <div class="form-row">
+            <div class="form-group"><label>Layout do Painel</label><select id="cfg-layout"><option value="normal">Padrão</option><option value="video">Com Vídeo (YouTube)</option></select></div>
+            <div class="form-group"><label>URL do Vídeo</label><input id="cfg-video-url" placeholder="Ex: https://www.youtube.com/watch?v=..."></div>
+            <div class="form-group"><label>Vol. Vídeo (0 a 100)</label><input id="cfg-video-volume" type="number" min="0" max="100" value="0"></div>
+        </div>
         <div class="form-group">
             <label>Voz do Chamado</label>
             <div style="display:flex; gap:10px">
@@ -149,9 +158,10 @@
     session = JSON.parse(localStorage.getItem('sa_session') || '{}');
     if(!session?.token) { window.location='/login'; return; }
     try {
-        const res = await fetch('/api/status', {headers:{'Authorization':'Bearer '+session.token}});
+        const res = await fetch('/api/status?v=' + Date.now(), {headers:{'Authorization':'Bearer '+session.token}, cache: 'no-store'});
         if(res.status === 401) { logout(); return; }
         const st = await res.json();
+        console.log("Configurações recebidas:", st);
         if(st.tenant) {
             document.getElementById('ap-primary').value = st.tenant.primary || "#4f6ef7";
             document.getElementById('ap-secondary').value = st.tenant.secondary || "#00e5a0";
@@ -159,10 +169,29 @@
             document.getElementById('ap-logo').value = st.tenant.logo || "";
             document.getElementById('cfg-name').value = st.system_name || "";
             document.getElementById('cfg-subtitle').value = st.system_subtitle || "";
+            
+            // Preencher campos de configuração
+            if(st.config) {
+                if(document.getElementById('cfg-layout')) document.getElementById('cfg-layout').value = st.config.panel_layout || "normal";
+                if(document.getElementById('cfg-video-url')) document.getElementById('cfg-video-url').value = st.config.panel_video_url || "";
+                if(document.getElementById('cfg-video-volume')) document.getElementById('cfg-video-volume').value = st.config.panel_video_volume || "0";
+                
+                // Salvar no objeto session para uso do setupVoices posterior
+                session.config = st.config;
+            }
+            
+            // Tentar setar a voz após um pequeno delay para garantir que a lista de vozes carregou
+            setTimeout(() => {
+                if(session.config?.system_voice_index && document.getElementById('cfg-voice')) {
+                    document.getElementById('cfg-voice').value = session.config.system_voice_index;
+                }
+            }, 800);
         }
     } catch(e) { console.error('Status fetch error:', e); }
     document.getElementById('adm-user').textContent = session.user?.name || "Administrador";
-    loadDash(); loadTypes(); loadGuiches(); loadUsers();
+    setupVoices();
+    await loadTypes();
+    loadDash(); loadGuiches(); loadUsers();
   }
 
   let cHour = null, cType = null;
@@ -217,10 +246,15 @@
         options:{ plugins:{legend:{display:false}}, scales:{y:{beginAtZero:true, grid:{color:'rgba(255,255,255,0.05)'}}, x:{grid:{display:false}}} }
     });
 
+    const typeColors = Object.keys(d.by_type || {}).map(code => {
+        const t = (items.types || []).find(x => x.code === code || x.name === code);
+        return t ? t.color : '#4f6ef7';
+    });
+
     if(cType) cType.destroy();
     cType = new Chart(document.getElementById('c-type'), {
         type:'doughnut',
-        data:{ labels: Object.keys(d.by_type), datasets:[{data:Object.values(d.by_type), backgroundColor:['#4f6ef7','#00e5a0','#f5a623','#9b59b6','#f03e3e'], borderWidth:0}] },
+        data:{ labels: Object.keys(d.by_type || {}), datasets:[{data:Object.values(d.by_type || {}), backgroundColor: typeColors, borderWidth:0}] },
         options:{ plugins:{legend:{position:'bottom', labels:{color:'#6c7693', font:{size:11}}}} }
     });
   }
@@ -238,7 +272,7 @@
     const data = await res.json();
     if(!Array.isArray(data)) return;
     items.types = data;
-    document.getElementById('types-tbody').innerHTML = items.types.map((t,i)=>`<tr><td><strong>${t.code}</strong></td><td>${t.name}</td><td><i class="fa ${t.icon}"></i></td><td>${t.priority}</td><td><span class="badge ${t.active?'badge-active':'badge-inactive'}">${t.active?'Ativo':'Inativo'}</span></td><td class="actions"><button class="btn-icon" onclick="openTypeModal(${i})"><i class="fa fa-pen"></i></button></td></tr>`).join('');
+    document.getElementById('types-tbody').innerHTML = items.types.map((t,i)=>`<tr><td><strong>${t.code}</strong></td><td>${t.name}</td><td><i class="fa ${t.icon}"></i></td><td style="font-size:0.8rem; font-weight:600; color:var(--accent)">${t.priority_guiches || '---'}</td><td><span class="badge ${t.active?'badge-active':'badge-inactive'}">${t.active?'Ativo':'Inativo'}</span></td><td class="actions"><button class="btn-icon" onclick="openTypeModal(${i})"><i class="fa fa-pen"></i></button></td></tr>`).join('');
   }
 
   async function loadGuiches() {
@@ -293,13 +327,18 @@
                 <span style="font-size:0.8rem; color:var(--muted)">Clique em um ícone abaixo</span>
             </div>
         </div>
-        <div class="icon-grid">
+      <div class="form-group">
+        <label>Guichês Prioritários/Exclusivos</label>
+        <input id="f-guiches" value="${t?.priority_guiches||''}" placeholder="Ex: Guichê 01, Guichê 02">
+        <small style="color:var(--muted); font-size:0.7rem; display:block; margin-top:4px">Estes guichês chamarão este tipo primeiro. Separe por vírgula.</small>
+      </div>
+      <div class="icon-grid">
             ${commonIcons.map(icon => `
                 <div class="icon-item ${t?.icon===icon || (!t && icon==='fa-ticket') ? 'selected' : ''}" onclick="selectIcon('${icon}', this)">
                     <i class="fa ${icon}"></i>
                 </div>
             `).join('')}
-        </div>
+      </div>
       </div>
       <div class="form-group" style="display:flex; align-items:center; gap:10px; margin-top:10px; background:var(--glass); padding:12px; border-radius:10px">
         <input type="checkbox" id="f-active" ${t?.active!==false?'checked':''} style="width:20px; height:20px; cursor:pointer">
@@ -321,7 +360,8 @@
           color:document.getElementById('f-color').value, 
           icon:document.getElementById('f-icon').value, 
           priority:parseInt(document.getElementById('f-prio').value), 
-          active:document.getElementById('f-active').checked 
+          active:document.getElementById('f-active').checked,
+          priority_guiches:document.getElementById('f-guiches').value
       };
       const url = t ? `/api/admin/types?type_id=${t.id}` : '/api/admin/types';
       const res = await fetch(url, {
@@ -404,7 +444,10 @@
       const data = { 
           system_name: document.getElementById('cfg-name').value, 
           system_subtitle: document.getElementById('cfg-subtitle').value,
-          system_voice_index: document.getElementById('cfg-voice').value
+          system_voice_index: document.getElementById('cfg-voice').value,
+          panel_layout: document.getElementById('cfg-layout').value,
+          panel_video_url: document.getElementById('cfg-video-url').value,
+          panel_video_volume: document.getElementById('cfg-video-volume').value || "0"
       };
       const res = await fetch('/api/admin/settings', {
           method:'POST', 
@@ -449,31 +492,6 @@
   function closeModal() { document.getElementById('modal').classList.add('hidden'); }
   function modalConfirm() { if(window._modalAction) window._modalAction(); }
   function logout() { localStorage.removeItem('sa_session'); window.location='/login'; }
-  
-  async function init() {
-    session = JSON.parse(localStorage.getItem('sa_session') || '{}');
-    if(!session?.token) { window.location='/login'; return; }
-    try {
-        const res = await fetch('/api/status', {headers:{'Authorization':'Bearer '+session.token}});
-        if(res.status === 401) { logout(); return; }
-        const st = await res.json();
-        session.config = st.config || {};
-        if(st.tenant) {
-            document.getElementById('ap-primary').value = st.tenant.primary || "#4f6ef7";
-            document.getElementById('ap-secondary').value = st.tenant.secondary || "#00e5a0";
-            document.getElementById('ap-bg').value = st.tenant.bg || "#0c0f16";
-            document.getElementById('ap-logo').value = st.tenant.logo || "";
-            document.getElementById('cfg-name').value = st.system_name || "";
-            document.getElementById('cfg-subtitle').value = st.system_subtitle || "";
-            if(st.config?.system_voice_index) {
-                document.getElementById('cfg-voice').value = st.config.system_voice_index;
-            }
-        }
-    } catch(e) { console.error('Status fetch error:', e); }
-    document.getElementById('adm-user').textContent = session.user?.name || "Administrador";
-    setupVoices();
-    loadDash(); loadTypes(); loadGuiches(); loadUsers();
-  }
   init();
 </script>
 </body>

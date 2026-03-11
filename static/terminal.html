@@ -15,7 +15,10 @@
 
 <div class="terminal-card">
   <div class="term-header">
-    <h1 id="sys-name">Sistema de Atendimento</h1>
+    <div style="display:flex; align-items:center; justify-content:center; gap:12px; margin-bottom:10px">
+      <img id="brand-logo" src="" alt="" style="display:none; height:45px; width:auto; object-fit:contain; border-radius:8px">
+      <h1 id="sys-name" style="margin:0">Sistema de Atendimento</h1>
+    </div>
     <div class="sub" id="user-bar">Carregando...</div>
   </div>
 
@@ -97,6 +100,11 @@
     const data = await res.json();
     if(data.system_name) {
       document.getElementById('sys-name').textContent = data.system_name;
+      const logoImg = document.getElementById('brand-logo');
+      if (data.tenant?.logo) {
+        logoImg.src = data.tenant.logo;
+        logoImg.style.display = 'block';
+      }
       document.title = data.system_name + ' – Terminal';
     }
     buildTypeButtons(data.types || []);

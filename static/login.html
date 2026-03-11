@@ -129,6 +129,15 @@
         return;
       }
 
+      if(role === 'painel') {
+        const slug = data.user.tenant?.slug;
+        localStorage.setItem('sa_session', JSON.stringify({
+           token: data.token, user: data.user, slug: slug
+        }));
+        window.location = `/${slug}/panel`;
+        return;
+      }
+
       showGuicheModal();
     } catch(e) { err.textContent = 'Erro de conexão.'; err.style.display = 'block'; }
   }

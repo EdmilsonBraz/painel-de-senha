@@ -78,6 +78,13 @@
       <div class="table-card" style="padding:24px;display:flex;flex-direction:column;gap:16px">
         <div class="form-group"><label>Nome</label><input id="cfg-name"></div>
         <div class="form-group"><label>Subtítulo</label><input id="cfg-subtitle"></div>
+        <div class="form-group">
+            <label>Voz do Chamado</label>
+            <div style="display:flex; gap:10px">
+                <select id="cfg-voice" style="flex:1"></select>
+                <button class="btn btn-neutral" onclick="testVoice()" style="width: auto;"><i class="fa fa-volume-up"></i> Testar</button>
+            </div>
+        </div>
         <button class="btn btn-success" onclick="saveSettings()">Salvar</button>
       </div>
     </div>
@@ -363,6 +370,7 @@
                 <option value="operator">Operador</option>
                 <option value="admin">Administrador</option>
                 <option value="kiosk">Totem (Kiosk)</option>
+                <option value="painel">Painel de Chamada</option>
             </select>
         </div>
         <div class="form-group" style="display:flex; align-items:center; gap:10px; background:var(--glass); padding:12px; border-radius:10px">
@@ -392,9 +400,80 @@
       if(res.ok) showMessage('Aparência atualizada!', 'success');
   }
 
+  async function saveSettings() {
+      const data = { 
+          system_name: document.getElementById('cfg-name').value, 
+          system_subtitle: document.getElementById('cfg-subtitle').value,
+          system_voice_index: document.getElementById('cfg-voice').value
+      };
+      const res = await fetch('/api/admin/settings', {
+          method:'POST', 
+          headers:{'Authorization':'Bearer '+session.token,'Content-Type':'application/json'}, 
+          body:JSON.stringify(data)
+      });
+      if(res.ok) showMessage('Configurações salvas!', 'success');
+      else showMessage('Erro ao salvar!', 'error');
+  }
+
+  let voices = [];
+  function setupVoices() {
+      if(!window.speechSynthesis) return;
+      voices = window.speechSynthesis.getVoices().filter(v => v.lang.includes('pt-'));
+      const sel = document.getElementById('cfg-voice');
+      if(!sel) return;
+      
+      const currentVal = sel.value;
+      sel.innerHTML = voices.map((v,i) => `<option value="${i}">${v.name}</option>`).join('');
+      
+      if(currentVal) sel.value = currentVal;
+      else if(session?.config?.system_voice_index) sel.value = session.config.system_voice_index;
+  }
+
+  if(window.speechSynthesis) {
+      window.speechSynthesis.onvoiceschanged = setupVoices;
+      setupVoices();
+  }
+
+  function testVoice() {
+    const idx = document.getElementById('cfg-voice').value;
+    const v = voices[idx];
+    if(!v) return showMessage('Selecione uma voz para testar','error');
+    
+    window.speechSynthesis.cancel();
+    const u = new SpeechSynthesisUtterance('Senha N zero zero um, Guichê um');
+    u.voice = v; u.lang = 'pt-BR'; u.rate = 1;
+    window.speechSynthesis.speak(u);
+    showMessage(`Testando voz: ${v.name}`,'success');
+  }
+
   function closeModal() { document.getElementById('modal').classList.add('hidden'); }
   function modalConfirm() { if(window._modalAction) window._modalAction(); }
   function logout() { localStorage.removeItem('sa_session'); window.location='/login'; }
+  
+  async function init() {
+    session = JSON.parse(localStorage.getItem('sa_session') || '{}');
+    if(!session?.token) { window.location='/login'; return; }
+    try {
+        const res = await fetch('/api/status', {headers:{'Authorization':'Bearer '+session.token}});
+        if(res.status === 401) { logout(); return; }
+        const st = await res.json();
+        session.config = st.config || {};
+        if(st.tenant) {
+            document.getElementById('ap-primary').value = st.tenant.primary || "#4f6ef7";
+            document.getElementById('ap-secondary').value = st.tenant.secondary || "#00e5a0";
+            document.getElementById('ap-bg').value = st.tenant.bg || "#0c0f16";
+            document.getElementById('ap-logo').value = st.tenant.logo || "";
+            document.getElementById('cfg-name').value = st.system_name || "";
+            document.getElementById('cfg-subtitle').value = st.system_subtitle || "";
+            if(st.config?.system_voice_index) {
+                document.getElementById('cfg-voice').value = st.config.system_voice_index;
+            }
+        }
+    } catch(e) { console.error('Status fetch error:', e); }
+    document.getElementById('adm-user').textContent = session.user?.name || "Administrador";
+    setupVoices();
+    loadDash(); loadTypes(); loadGuiches(); loadUsers();
+  }
   init();
 </script>
 </body>

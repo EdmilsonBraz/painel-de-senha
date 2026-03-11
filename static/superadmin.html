@@ -79,6 +79,10 @@
           <label>Plano</label>
           <select id="t-plan-id"></select>
       </div>
+      <div class="form-group" style="display:flex; align-items:center; gap:10px; background:var(--glass); padding:12px; border-radius:10px">
+          <input type="checkbox" id="t-active" checked style="width:20px; height:20px; cursor:pointer">
+          <label for="t-active" style="margin-bottom:0; cursor:pointer">Unidade Ativa</label>
+      </div>
       <div class="modal-footer"><button class="btn btn-neutral" onclick="closeModal('modal-tenant')">Cancelar</button><button class="btn btn-primary" onclick="saveTenant()">Salvar</button></div>
     </div>
   </div>
@@ -110,6 +114,7 @@
               <option value="admin">Administrador</option>
               <option value="operator">Operador</option>
               <option value="kiosk">Totem (Kiosk)</option>
+              <option value="painel">Painel de Chamada</option>
           </select>
       </div>
       <div class="modal-footer"><button class="btn btn-neutral" onclick="closeModal('modal-user-edit')">Cancelar</button><button class="btn btn-primary" onclick="saveUserEdit()">Atualizar Usuário</button></div>
@@ -210,7 +215,7 @@
             <button class="btn btn-neutral btn-sm" onclick="loadTenantUsers(${t.id},'${t.name}')"><i class="fa fa-users"></i></button>
             <a href="/${t.slug}/panel" target="_blank" class="btn btn-neutral btn-sm">Painel</a>
         </td>
-        <td>${t.active ? 'Ativo' : 'Pendente'}</td>
+        <td><span class="badge ${t.active ? 'badge-active' : 'badge-inactive'}">${t.active ? 'Ativo' : 'Inativo'}</span></td>
         <td class="actions">
             <button class="btn-icon" onclick="openTenantModal(${idx})"><i class="fa fa-pen"></i></button>
         </td>
@@ -271,10 +276,15 @@
       slugInput.value = t?.slug || '';
       slugInput.parentNode.style.display = t ? 'none' : 'block';
       document.getElementById('t-plan-id').value = t?.plan_id || plans[0]?.id;
+      document.getElementById('t-active').checked = t ? t.active : true;
       document.getElementById('modal-tenant').classList.remove('hidden');
   }
   async function saveTenant() {
-      const body = { name: document.getElementById('t-name').value, plan_id: parseInt(document.getElementById('t-plan-id').value) };
+      const body = { 
+          name: document.getElementById('t-name').value, 
+          plan_id: parseInt(document.getElementById('t-plan-id').value),
+          active: document.getElementById('t-active').checked
+      };
       if(!editId) body.slug = document.getElementById('t-slug').value;
       const url = editId ? `/api/super/tenants/${editId}` : '/api/super/tenants';
       const res = await fetch(url, { method: editId?'PUT':'POST', headers:{'Authorization':'Bearer '+session.token,'Content-Type':'application/json'}, body:JSON.stringify(body) });

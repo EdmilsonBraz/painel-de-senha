@@ -67,6 +67,8 @@ def get_current_user(creds: Optional[HTTPAuthorizationCredentials] = Depends(sec
     except JWTError: raise HTTPException(401, "Token inválido/expirado")
     user = db.query(User).filter(User.id == int(payload["sub"]), User.active == True).first()
     if not user: raise HTTPException(401, "Usuário não encontrado")
+    if user.tenant_id and not user.tenant.active:
+        raise HTTPException(401, "Unidade inativa. Entre em contato com o suporte.")
     return user
 
 def require_admin(user: User = Depends(get_current_user)):
@@ -138,6 +140,8 @@ async def generate_password(slug: str, ticket_type: str, db: Session = Depends(g
 def login(req: LoginReq, db: Session = Depends(get_db)):
     user = db.query(User).filter(User.username == req.username, User.active == True).first()
     if not user or not pwd_context.verify(req.password, user.password_hash): raise HTTPException(401, "Usuário ou senha incorretos")
+    if user.tenant_id and not user.tenant.active:
+        raise HTTPException(401, "Unidade inativa. Entre em contato com o suporte.")
     tenant_info = {"id": user.tenant.id, "name": user.tenant.name, "slug": user.tenant.slug} if user.tenant else None
     return {"token": create_token(user.id), "user": {"id": user.id, "name": user.name, "username": user.username, "role": user.role, "tenant": tenant_info}}
 

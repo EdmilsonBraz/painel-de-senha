@@ -52,7 +52,7 @@ class User(Base):
     username      = Column(String(50), unique=True, nullable=False)
     password_hash = Column(String(200), nullable=False)
     name          = Column(String(100), nullable=False)
-    role          = Column(String(20), default="operator")   # superadmin | admin | operator
+    role          = Column(String(20), default="operator")   # superadmin | admin | operator | kiosk | painel
     active        = Column(Boolean, default=True)
     created_at    = Column(DateTime, default=datetime.now)
 

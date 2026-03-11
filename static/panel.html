@@ -23,7 +23,10 @@
     </aside>
   </div>
   <footer class="panel-footer">
-    <div class="brand" id="brand-name">Carregando...</div>
+    <div style="display:flex; align-items:center; gap:12px">
+      <img id="brand-logo" src="" alt="" style="display:none; height:45px; width:auto; object-fit:contain; border-radius:8px">
+      <div class="brand" id="brand-name">Carregando...</div>
+    </div>
     <div id="clock">00:00:00</div>
   </footer>
 </div>
@@ -36,6 +39,17 @@
   const slug   = window.location.pathname.split('/')[1]; // Pega o slug da URL: /slug/panel
   let history  = [];
   let tenantId = null;
+  let voiceIndex = null;
+  let voices = [];
+
+  function setupVoices() {
+    if(!window.speechSynthesis) return;
+    voices = window.speechSynthesis.getVoices().filter(v => v.lang.includes('pt-'));
+  }
+  if(window.speechSynthesis) {
+    window.speechSynthesis.onvoiceschanged = setupVoices;
+    setupVoices();
+  }
 
   async function loadStatus() {
     const r = await fetch(`/api/${slug}/status`);
@@ -43,6 +57,7 @@
     const d = await r.json();
     
     tenantId = d.tenant ? d.tenant.id : null;
+    voiceIndex = d.config ? d.config.system_voice_index : null;
     
     // Aplicar Aparência Customizada
     const root = document.documentElement;
@@ -51,6 +66,13 @@
     if(d.tenant.bg)        root.style.setProperty('--bg', d.tenant.bg);
     
     document.getElementById('brand-name').textContent = d.system_name;
+    const logoImg = document.getElementById('brand-logo');
+    if (d.tenant.logo) {
+      logoImg.src = d.tenant.logo;
+      logoImg.style.display = 'block';
+    } else {
+      logoImg.style.display = 'none';
+    }
     document.title = d.system_name + ' – Painel';
 
     if(d.last_called) {
@@ -72,6 +94,11 @@
     window.speechSynthesis.cancel();
     const u = new SpeechSynthesisUtterance();
     u.lang  = 'pt-BR'; u.rate = 0.88; u.volume = 1;
+    
+    if (voiceIndex !== null && voiceIndex !== undefined && voices[voiceIndex]) {
+        u.voice = voices[voiceIndex];
+    }
+    
     u.text  = `Senha ${pass.split('').join(' ')}, ${term}`;
     let n=0; u.onend = ()=>{ if(++n<2) window.speechSynthesis.speak(u); };
     window.speechSynthesis.speak(u);

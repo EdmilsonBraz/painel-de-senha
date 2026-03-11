@@ -33,6 +33,7 @@ socket_app = socketio.ASGIApp(sio, app)
 tenants_queues   = {} 
 tenants_counters = {} 
 tenants_history  = {} 
+tenants_dates    = {} # {tenant_id: "YYYY-MM-DD"}
 active_guiches   = {} # {(tenant_id, name): {"user_id": int, "user_name": str}}
 
 def startup():
@@ -46,6 +47,7 @@ def startup():
             tenants_queues[t.id]   = {}
             tenants_counters[t.id] = {}
             tenants_history[t.id]  = []
+            tenants_dates[t.id]    = datetime.now().strftime("%Y-%m-%d")
             
             types = db.query(TicketType).filter(TicketType.tenant_id == t.id, TicketType.active == True).all()
             for tt in types:
@@ -82,10 +84,13 @@ def require_superadmin(user: User = Depends(get_current_user)):
 
 # ── Multi-Tenant Helpers ───────────────────────────────────────────────────
 def get_tenant_queues(tenant_id: int):
-    if tenant_id not in tenants_queues:
+    today = datetime.now().strftime("%Y-%m-%d")
+    if tenant_id not in tenants_queues or tenants_dates.get(tenant_id) != today:
+        print(f"DEBUG: Resetando contadores do tenant {tenant_id} para o dia {today}")
         tenants_queues[tenant_id]   = {}
         tenants_counters[tenant_id] = {}
         tenants_history[tenant_id]  = []
+        tenants_dates[tenant_id]    = today
     return tenants_queues[tenant_id], tenants_counters[tenant_id], tenants_history[tenant_id]
 
 def get_tenant_by_slug(slug: str, db: Session):

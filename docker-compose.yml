@@ -1,14 +1,11 @@
 services:
-  swiftq-app:
+  app:
     build: .
-    container_name: swiftq_service
-    ports:
-      - "9000:9000"
     volumes:
-      - ./data:/app/data  # Persistência de dados (Banco de Dados / Logos / Downloads)
-      - ./static:/app/static # Persistência de arquivos estáticos/customizações
+      - ./data:/app/data
+      - ./static:/app/static
     environment:
-      - TZ=America/Sao_Paulo # Mantém o fuso horário correto para o Brasil
+      - TZ=America/Sao_Paulo
     restart: always
 
 # EasyPanel usa o padrão do Docker Compose para subir a aplicação.

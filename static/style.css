@@ -498,3 +498,91 @@ label{display:block;font-size:.8rem;font-weight:600;color:var(--muted);text-tran
 .icon-item { display: flex; align-items: center; justify-content: center; width: 44px; height: 44px; border-radius: 8px; border: 1px solid var(--border); background: var(--surface); color: var(--muted); cursor: pointer; transition: all 0.2s; font-size: 1.2rem; }
 .icon-item:hover { background: var(--glass); color: var(--primary); border-color: var(--primary); transform: translateY(-2px); }
 .icon-item.selected { background: var(--primary); color: white; border-color: var(--primary); box-shadow: 0 4px 12px rgba(79,110,247,0.4); }
+/* ─── RESPONSIVIDADE (Mobile/Tablet) ──────────────── */
+@media (max-width: 900px) {
+    .admin-layout { grid-template-columns: 1fr; }
+    .admin-sidebar { display: none; }
+    .admin-topbar .brand { font-size: 1.2rem; }
+}
+
+@media (max-width: 768px) {
+    /* Terminal Operador */
+    .terminal-container {
+        grid-template-columns: 1fr;
+        grid-template-rows: auto 1fr;
+        overflow-y: auto;
+    }
+    
+    .term-sidebar {
+        border-right: none;
+        border-bottom: 1px solid var(--border);
+        padding: 16px;
+        gap: 16px;
+    }
+    
+    .term-header-mini {
+        flex-direction: row;
+        align-items: center;
+        justify-content: space-between;
+    }
+    
+    .logo-mini { height: 32px; }
+    .user-info-card { padding: 8px 12px; margin-top: 0; }
+    
+    /* Esconder monitor de filas no mobile para economizar espaço ou mudar para horizontal */
+    .queue-monitor { display: none; }
+    
+    .last-call-box {
+        margin-top: 0;
+        padding: 12px;
+        display: flex;
+        align-items: center;
+        justify-content: space-around;
+        background: var(--glass);
+    }
+    
+    .last-call-box .pw { font-size: 1.8rem; margin: 0; }
+    .last-call-box .tag { font-size: 0.55rem; }
+    
+    .term-main {
+        padding: 16px;
+        gap: 20px;
+    }
+    
+    .call-giant-btn {
+        height: 180px;
+        border-radius: 20px;
+    }
+    
+    .btn-content i { font-size: 3rem; }
+    .btn-content span { font-size: 1.4rem; }
+    .btn-content small { font-size: 0.8rem; }
+    
+    .secondary-actions { padding: 16px; }
+    .type-grid {
+        grid-template-columns: 1fr 1fr;
+        gap: 10px;
+    }
+    
+    .tbn { padding: 12px; font-size: 0.85rem; }
+    
+    /* Login */
+    .login-card { padding: 32px 24px; border-radius: 24px; }
+    .login-logo img { height: 80px !important; }
+    
+    /* Admin General */
+    .admin-content { padding: 16px; }
+    .stats-grid { grid-template-columns: 1fr 1fr; }
+    .charts-row { grid-template-columns: 1fr; }
+    
+    /* Modais */
+    .modal-card { padding: 20px; border-radius: 16px; }
+    .form-row { grid-template-columns: 1fr; }
+}
+
+@media (max-width: 480px) {
+    .stats-grid { grid-template-columns: 1fr; }
+    .last-call-box { flex-direction: column; gap: 4px; }
+    .type-grid { grid-template-columns: 1fr; }
+    .call-giant-btn { height: 150px; }
+}

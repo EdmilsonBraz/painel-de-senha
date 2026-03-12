@@ -5,7 +5,7 @@ from passlib.context import CryptContext
 
 import os
 if not os.path.exists("./data"): os.makedirs("./data", exist_ok=True)
-DATABASE_URL = "sqlite:///./data/painel.db"
+DATABASE_URL = "sqlite:////app/data/painel.db"
 engine = create_engine(DATABASE_URL, connect_args={"check_same_thread": False})
 SessionLocal = sessionmaker(bind=engine, autocommit=False, autoflush=False)
 Base = declarative_base()

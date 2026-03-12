@@ -2,11 +2,12 @@ services:
   app:
     build: .
     volumes:
-      - ./data:/app/data
-      - ./static:/app/static
+      - swiftq_data:/app/data
+      - swiftq_static:/app/static
     environment:
       - TZ=America/Sao_Paulo
     restart: always
 
-# EasyPanel usa o padrão do Docker Compose para subir a aplicação.
-# O Banco de Dados SQLite (database.db) será mantido na pasta ./data no volume.
+volumes:
+  swiftq_data:
+  swiftq_static:

@@ -1,7 +1,9 @@
 fastapi
 uvicorn
 sqlalchemy
-passlib[bcrypt]
+passlib
+bcrypt==4.0.1
+setuptools
 python-jose[cryptography]
 python-socketio
 pydantic

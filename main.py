@@ -13,6 +13,7 @@ import os
 import time
 import pandas as pd
 import io
+import requests
 
 from database import (
     get_db, User, TicketType, Guiche, Setting, CallRecord, Tenant, Plan,
@@ -126,8 +127,13 @@ async def get_tenant_status(slug: str, db: Session = Depends(get_db)):
     q_map, _, history = get_tenant_queues(t.id)
     types = db.query(TicketType).filter(TicketType.tenant_id == t.id, TicketType.active == True).order_by(TicketType.priority.desc()).all()
     cfg   = {s.key: s.value for s in db.query(Setting).filter(Setting.tenant_id == t.id).all()}
+    # Corrigir Mixed Content (HTTP em HTTPS) se necessário
+    logo = t.logo_url
+    if logo and logo.startswith("http://"):
+        logo = f"/api/proxy-image?url={logo}"
+
     return {
-        "tenant": {"id": t.id, "name": t.name, "primary": t.primary_color, "secondary": t.secondary_color, "bg": t.bg_color, "logo": t.logo_url},
+        "tenant": {"id": t.id, "name": t.name, "primary": t.primary_color, "secondary": t.secondary_color, "bg": t.bg_color, "logo": logo},
         "queues": {k: len(v) for k, v in q_map.items()},
         "types": [{"code": tt.code, "name": tt.name, "color": tt.color, "icon": tt.icon} for tt in types],
         "history": history[:8],
@@ -136,6 +142,16 @@ async def get_tenant_status(slug: str, db: Session = Depends(get_db)):
         "system_subtitle": cfg.get("system_subtitle", ""),
         "config": cfg
     }
+
+@app.get("/api/proxy-image")
+def proxy_image(url: str):
+    try:
+        # Pega a imagem via backend para evitar erro de Mixed Content (HTTP vs HTTPS)
+        r = requests.get(url, timeout=10, verify=False) # verify=False para lidar com certs expirados da intranet
+        return Response(content=r.content, media_type=r.headers.get("content-type"))
+    except Exception as e:
+        print(f"Erro no proxy de imagem: {e}")
+        raise HTTPException(404, "Imagem não encontrada ou inacessível")
 
 @app.post("/api/{slug}/generate/{ticket_type}")
 async def generate_password(slug: str, ticket_type: str, db: Session = Depends(get_db)):
@@ -197,8 +213,13 @@ def get_my_status(user: User = Depends(get_current_user), db: Session = Depends(
     types = db.query(TicketType).filter(TicketType.tenant_id == t.id, TicketType.active == True).order_by(TicketType.priority.desc()).all()
     cfg   = {s.key: s.value for s in db.query(Setting).filter(Setting.tenant_id == t.id).all()}
     print(f"DEBUG: Status para Tenant {t.id} - system_name no DB: {cfg.get('system_name')}")
+    # Corrigir Mixed Content (HTTP em HTTPS) se necessário
+    logo = t.logo_url
+    if logo and logo.startswith("http://"):
+        logo = f"/api/proxy-image?url={logo}"
+
     return {
-        "tenant": {"id": t.id, "name": t.name, "primary": t.primary_color, "secondary": t.secondary_color, "bg": t.bg_color, "logo": t.logo_url},
+        "tenant": {"id": t.id, "name": t.name, "primary": t.primary_color, "secondary": t.secondary_color, "bg": t.bg_color, "logo": logo},
         "queues": {k: len(v) for k, v in q_map.items()},
         "types": [{"code": tt.code, "name": tt.name, "color": tt.color, "icon": tt.icon} for tt in types],
         "history": history[:8],
@@ -250,8 +271,21 @@ async def call_next_tenant(terminal: str, type: Optional[str] = None, user: User
     call_data = {"password": password, "terminal": terminal, "user_name": user.name, "type": target, "label": tt_obj.name, "color": tt_obj.color, "time": datetime.now().strftime("%H:%M:%S")}
     history.insert(0, call_data)
     if len(history) > 30: history.pop()
-    db.add(CallRecord(tenant_id=tid, password=password, ticket_type_code=target, ticket_type_name=tt_obj.name, guiche_name=terminal, user_name=user.name, date_key=datetime.now().strftime("%Y-%m-%d")))
-    db.commit(); await sio.emit(f"password_called_{tid}", call_data)
+    
+    # Grava no banco com o momento da criação para cálculo de espera
+    c_time = datetime.fromtimestamp(t_obj["t"])
+    db.add(CallRecord(
+        tenant_id=tid, 
+        password=password, 
+        ticket_type_code=target, 
+        ticket_type_name=tt_obj.name, 
+        guiche_name=terminal, 
+        user_name=user.name, 
+        date_key=datetime.now().strftime("%Y-%m-%d"),
+        created_at=c_time
+    ))
+    db.commit(); 
+    await sio.emit(f"password_called_{tid}", call_data)
     return call_data
 
 @app.post("/api/recall")
@@ -512,8 +546,19 @@ def get_summary(start: str, end: str, ticket_type: Optional[str] = None, guiche:
         h = str(c.called_at.hour); by_hour[h] = by_hour.get(h, 0) + 1
         wd = weekdays[c.called_at.weekday()]; by_weekday[wd] = by_weekday.get(wd, 0) + 1
         
+    # Calcular Tempo de Espera Médio (segundos)
+    wait_total = 0
+    wait_count = 0
+    for c in calls:
+        if c.created_at:
+            wait_total += (c.called_at - c.created_at).total_seconds()
+            wait_count += 1
+    
+    avg_wait = wait_total / wait_count if wait_count > 0 else 0
+
     return {
         "total": len(calls), 
+        "avg_wait": avg_wait,
         "by_type": by_type, 
         "by_guiche": by_guiche, 
         "by_attendant": by_attendant,
@@ -528,13 +573,22 @@ def export_report(start: str, end: str, ticket_type: Optional[str] = None, guich
     q = build_report_query(tid, start, end, ticket_type, guiche, attendant, db).order_by(CallRecord.called_at.asc())
     data = []
     for c in q.all():
+        # Calcula tempo de espera
+        wait_str = "---"
+        if c.created_at:
+            diff = (c.called_at - c.created_at).total_seconds()
+            m, s = divmod(int(diff), 60)
+            wait_str = f"{m:02d}:{s:02d}"
+
         data.append({
             "Senha": c.password,
             "Tipo": c.ticket_type_name,
             "Guichê": c.guiche_name,
             "Atendente": c.user_name,
-            "Data": c.date_key,
-            "Hora": c.called_at.strftime("%H:%M:%S")
+            "Gerado em": c.created_at.strftime("%H:%M:%S") if c.created_at else "---",
+            "Chamado em": c.called_at.strftime("%H:%M:%S"),
+            "Espera (Min)": wait_str,
+            "Data": c.date_key
         })
     
     df = pd.DataFrame(data)

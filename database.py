@@ -104,6 +104,7 @@ class CallRecord(Base):
     ticket_type_name = Column(String(100), nullable=False)
     guiche_name      = Column(String(100), nullable=False)
     user_name        = Column(String(100), nullable=False)
+    created_at       = Column(DateTime, nullable=True) # Momento em que a senha foi gerada no totem
     called_at        = Column(DateTime, default=datetime.now, index=True)
     date_key         = Column(String(10), nullable=False, index=True)
 

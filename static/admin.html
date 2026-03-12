@@ -62,6 +62,7 @@
         <div class="stat-card"><div class="sv" id="r-total">0</div><div class="sl">Total Chamadas</div></div>
         <div class="stat-card"><div class="sv" id="r-peak" style="font-size:1.6rem">--</div><div class="sl">Pico (Hora)</div></div>
         <div class="stat-card"><div class="sv" id="r-peakday" style="font-size:1.6rem">--</div><div class="sl">Pico (Dia)</div></div>
+        <div class="stat-card"><div class="sv" id="r-wait" style="font-size:1.6rem; color:var(--accent)">00:00</div><div class="sl">Média de Espera</div></div>
       </div>
 
       <div class="charts-row" style="margin-bottom:20px">
@@ -257,6 +258,11 @@
         const d = await res.json();
         document.getElementById('r-total').textContent = d.total;
         
+        // Tempo de espera formatado
+        const m = Math.floor(d.avg_wait / 60);
+        const s = Math.floor(d.avg_wait % 60);
+        document.getElementById('r-wait').textContent = `${m.toString().padStart(2,'0')}:${s.toString().padStart(2,'0')}`;
+
         // Atendentes
         document.getElementById('r-attendants').innerHTML = '<strong style="color:var(--primary)">Performance por Atendente</strong><br>' + 
             (Object.entries(d.by_attendant).length ? 

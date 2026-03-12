@@ -39,7 +39,7 @@
 
     <div class="term-footer">
         <span id="admin-link" style="display:none"><a href="/admin" class="footer-link"><i class="fa fa-gear"></i> Adm</a></span>
-        <a href="/reports" class="footer-link"><i class="fa fa-chart-bar"></i> Relatórios</a>
+        <span id="reports-link" style="display:none"><a href="/reports" class="footer-link"><i class="fa fa-chart-bar"></i> Relatórios</a></span>
         <a href="#" onclick="logout()" class="footer-link logout"><i class="fa fa-power-off"></i> Sair</a>
     </div>
   </aside>
@@ -109,7 +109,10 @@
     document.getElementById('user-bar').textContent = `👤 ${session.user?.name} &nbsp;·&nbsp; 🖥 ${currentGuiche}`;
     document.getElementById('user-bar').innerHTML = `<i class="fa fa-user"></i> ${session.user?.name} &nbsp;·&nbsp; <i class="fa fa-desktop"></i> ${currentGuiche}`;
 
-    if(session.user?.role === 'admin') document.getElementById('admin-link').style.display = 'block';
+    if(session.user?.role === 'admin') {
+      document.getElementById('admin-link').style.display = 'block';
+      document.getElementById('reports-link').style.display = 'block';
+    }
 
     // Carrega status e tipos
     const res  = await fetch('/api/status', { headers: authH() });

@@ -1,6 +1,6 @@
-from fastapi import FastAPI, Depends, HTTPException, Query
+from fastapi import FastAPI, Depends, HTTPException, Query, Response
 from fastapi.staticfiles import StaticFiles
-from fastapi.responses import HTMLResponse
+from fastapi.responses import HTMLResponse, StreamingResponse
 from fastapi.security import HTTPBearer, HTTPAuthorizationCredentials
 from sqlalchemy.orm import Session
 from passlib.context import CryptContext
@@ -11,6 +11,8 @@ from pydantic import BaseModel
 import socketio
 import os
 import time
+import pandas as pd
+import io
 
 from database import (
     get_db, User, TicketType, Guiche, Setting, CallRecord, Tenant, Plan,
@@ -35,6 +37,14 @@ tenants_counters = {}
 tenants_history  = {} 
 tenants_dates    = {} # {tenant_id: "YYYY-MM-DD"}
 active_guiches   = {} # {(tenant_id, name): {"user_id": int, "user_name": str}}
+printer_sid      = {} # {sid: tenant_id}
+
+@sio.on('join_printer')
+async def join_printer(sid, data):
+    tid = int(data.get('tenant_id'))
+    printer_sid[sid] = tid
+    print(f"Impressora vinculada à unidade {tid}")
+    await sio.enter_room(sid, f"printer_{tid}")
 
 def startup():
     Base.metadata.create_all(bind=engine)
@@ -146,6 +156,17 @@ async def generate_password(slug: str, ticket_type: str, db: Session = Depends(g
     cfg = {s.key: s.value for s in db.query(Setting).filter(Setting.tenant_id == t.id).all()}
     system_name = cfg.get("system_name", t.name)
     system_subtitle = cfg.get("system_subtitle", "")
+
+    # Notifica Bridge de Impressão via Socket.io
+    print_data = {
+        "password": password,
+        "label": tt.name,
+        "date": datetime.now().strftime("%d/%m/%Y"),
+        "time": datetime.now().strftime("%H:%M:%S"),
+        "system_name": system_name,
+        "system_subtitle": system_subtitle
+    }
+    await sio.emit("print_now", print_data, room=f"printer_{t.id}")
     now = datetime.now()
 
     return {
@@ -467,11 +488,19 @@ def super_update_user(uid: int, req: UserSuperUpdate, db: Session = Depends(get_
     db.commit(); return {"id": u.id, "name": u.name, "status": "updated"}
 
 # ── Reports ───────────────────────────────────────────────────────────────────
+def build_report_query(tid: int, start: str, end: str, ticket_type: Optional[str], guiche: Optional[str], attendant: Optional[str], db: Session):
+    q = db.query(CallRecord).filter(CallRecord.tenant_id == tid, CallRecord.date_key >= start, CallRecord.date_key <= end)
+    if ticket_type: q = q.filter(CallRecord.ticket_type_name == ticket_type)
+    if guiche: q = q.filter(CallRecord.guiche_name == guiche)
+    if attendant: q = q.filter(CallRecord.user_name == attendant)
+    return q
+
 @app.get("/api/reports/summary")
-def get_summary(start: str, end: str, user: User = Depends(require_admin), db: Session = Depends(get_db)):
+def get_summary(start: str, end: str, ticket_type: Optional[str] = None, guiche: Optional[str] = None, attendant: Optional[str] = None, user: User = Depends(require_admin), db: Session = Depends(get_db)):
     if not user.tenant_id: raise HTTPException(403)
     tid = user.tenant_id
-    calls = db.query(CallRecord).filter(CallRecord.tenant_id == tid, CallRecord.date_key >= start, CallRecord.date_key <= end).all()
+    calls = build_report_query(tid, start, end, ticket_type, guiche, attendant, db).all()
+    
     by_type = {}; by_guiche = {}; by_hour = {}; by_attendant = {}; by_weekday = {}
     weekdays = ["Segunda", "Terça", "Quarta", "Quinta", "Sexta", "Sábado", "Domingo"]
     
@@ -492,11 +521,49 @@ def get_summary(start: str, end: str, user: User = Depends(require_admin), db: S
         "by_weekday": by_weekday
     }
 
-@app.get("/api/reports/calls")
-def get_calls_report(start: str, end: str, page: int = 1, size: int = 50, user: User = Depends(require_admin), db: Session = Depends(get_db)):
+@app.get("/api/reports/export")
+def export_report(start: str, end: str, ticket_type: Optional[str] = None, guiche: Optional[str] = None, attendant: Optional[str] = None, user: User = Depends(require_admin), db: Session = Depends(get_db)):
     if not user.tenant_id: raise HTTPException(403)
     tid = user.tenant_id
-    q = db.query(CallRecord).filter(CallRecord.tenant_id == tid, CallRecord.date_key >= start, CallRecord.date_key <= end).order_by(CallRecord.called_at.desc())
+    q = build_report_query(tid, start, end, ticket_type, guiche, attendant, db).order_by(CallRecord.called_at.asc())
+    data = []
+    for c in q.all():
+        data.append({
+            "Senha": c.password,
+            "Tipo": c.ticket_type_name,
+            "Guichê": c.guiche_name,
+            "Atendente": c.user_name,
+            "Data": c.date_key,
+            "Hora": c.called_at.strftime("%H:%M:%S")
+        })
+    
+    df = pd.DataFrame(data)
+    if df.empty:
+        df = pd.DataFrame([{"Aviso": "Nenhum dado encontrado para o período/filtros selecionados"}])
+        
+    output = io.BytesIO()
+    try:
+        with pd.ExcelWriter(output, engine='openpyxl') as writer:
+            df.to_excel(writer, index=False, sheet_name='Atendimentos')
+        output.seek(0)
+    except Exception as e:
+        print(f"Erro ao gerar Excel: {e}")
+        raise HTTPException(500, "Erro interno ao gerar arquivo Excel")
+    
+    output.seek(0)
+    
+    filename = f"relatorio_{start}_a_{end}.xlsx"
+    return Response(
+        content=output.getvalue(),
+        media_type="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+        headers={"Content-Disposition": f"attachment; filename={filename}"}
+    )
+
+@app.get("/api/reports/calls")
+def get_calls_report(start: str, end: str, ticket_type: Optional[str] = None, guiche: Optional[str] = None, attendant: Optional[str] = None, page: int = 1, size: int = 50, user: User = Depends(require_admin), db: Session = Depends(get_db)):
+    if not user.tenant_id: raise HTTPException(403)
+    tid = user.tenant_id
+    q = build_report_query(tid, start, end, ticket_type, guiche, attendant, db).order_by(CallRecord.called_at.desc())
     total = q.count()
     items = q.offset((page-1)*size).limit(size).all()
     return {

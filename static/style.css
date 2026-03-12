@@ -107,7 +107,8 @@ label{display:block;font-size:.8rem;font-weight:600;color:var(--muted);text-tran
     display: grid;
     grid-template-columns: 320px 1fr;
     height: 100vh;
-    width: 100vw;
+    width: 100%;
+    max-width: 100%;
 }
 
 /* Sidebar Styling */
@@ -507,77 +508,107 @@ label{display:block;font-size:.8rem;font-weight:600;color:var(--muted);text-tran
 
 @media (max-width: 768px) {
     /* Terminal Operador */
+    .terminal-root {
+        overflow-y: auto;
+        height: auto;
+        min-height: 100vh;
+    }
+
     .terminal-container {
         grid-template-columns: 1fr;
-        grid-template-rows: auto 1fr;
-        overflow-y: auto;
+        grid-template-rows: auto auto;
+        height: auto;
+        width: 100%;
+        max-width: 100%;
+        overflow-x: hidden;
     }
     
     .term-sidebar {
         border-right: none;
         border-bottom: 1px solid var(--border);
-        padding: 16px;
-        gap: 16px;
+        padding: 12px;
+        gap: 12px;
     }
     
     .term-header-mini {
         flex-direction: row;
         align-items: center;
         justify-content: space-between;
+        gap: 10px;
     }
     
-    .logo-mini { height: 32px; }
-    .user-info-card { padding: 8px 12px; margin-top: 0; }
+    .logo-mini { height: 28px; }
+    .term-header-mini h2 { font-size: 1rem; }
+    .user-info-card { padding: 6px 10px; font-size: 0.75rem; width: auto; }
     
-    /* Esconder monitor de filas no mobile para economizar espaço ou mudar para horizontal */
     .queue-monitor { display: none; }
     
     .last-call-box {
         margin-top: 0;
-        padding: 12px;
+        padding: 10px;
         display: flex;
         align-items: center;
-        justify-content: space-around;
+        justify-content: space-between;
         background: var(--glass);
+        border-radius: 12px;
     }
     
-    .last-call-box .pw { font-size: 1.8rem; margin: 0; }
-    .last-call-box .tag { font-size: 0.55rem; }
+    .last-call-box .pw { font-size: 1.6rem; margin: 0; }
+    .last-call-box .tag { font-size: 0.5rem; }
+    .last-call-box .info { font-size: 0.65rem; }
     
     .term-main {
-        padding: 16px;
-        gap: 20px;
+        padding: 12px;
+        gap: 16px;
+        overflow: visible;
+        height: auto;
     }
     
     .call-giant-btn {
-        height: 180px;
+        height: 140px;
         border-radius: 20px;
+        max-width: 100%;
     }
     
-    .btn-content i { font-size: 3rem; }
-    .btn-content span { font-size: 1.4rem; }
-    .btn-content small { font-size: 0.8rem; }
+    .btn-content i { font-size: 2.2rem; }
+    .btn-content span { font-size: 1.2rem; }
+    .btn-content small { display: none; } /* Remove texto do enter no mobile */
     
-    .secondary-actions { padding: 16px; }
+    .secondary-actions { 
+        padding: 12px; 
+        margin-bottom: 20px;
+        width: 100%;
+    }
     .type-grid {
         grid-template-columns: 1fr 1fr;
-        gap: 10px;
+        gap: 8px;
     }
     
-    .tbn { padding: 12px; font-size: 0.85rem; }
+    .tbn { 
+        padding: 10px; 
+        font-size: 0.8rem; 
+        min-height: 70px;
+        justify-content: center;
+    }
+    .tbn i { font-size: 1.2rem; }
     
+    .utility-row {
+        flex-direction: row;
+        padding-top: 15px;
+        gap: 8px;
+    }
+    .util-btn { padding: 12px; font-size: 0.85rem; }
+
     /* Login */
-    .login-card { padding: 32px 24px; border-radius: 24px; }
-    .login-logo img { height: 80px !important; }
-    
-    /* Admin General */
-    .admin-content { padding: 16px; }
-    .stats-grid { grid-template-columns: 1fr 1fr; }
-    .charts-row { grid-template-columns: 1fr; }
+    .login-card { padding: 32px 20px; border-radius: 24px; }
     
     /* Modais */
-    .modal-card { padding: 20px; border-radius: 16px; }
-    .form-row { grid-template-columns: 1fr; }
+    .modal-card { 
+        padding: 16px; 
+        border-radius: 16px; 
+        width: 95%;
+        margin: auto;
+    }
 }
 
 @media (max-width: 480px) {

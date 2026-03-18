@@ -76,13 +76,13 @@ label{display:block;font-size:.8rem;font-weight:600;color:var(--muted);text-tran
 .call-card .pw{font-family:'Oswald',sans-serif;font-size:clamp(7rem,16vw,18rem);font-weight:700;color:#fff;line-height:1;text-shadow:0 0 60px rgba(79,110,247,.4);transition:.3s}
 .call-card .pw.flash{animation:flash .5s 4}
 @keyframes flash{50%{color:var(--accent);text-shadow:0 0 80px rgba(0,229,160,.8)}}
-.call-card .tb{margin-top:16px;font-size:clamp(1rem,2vw,1.8rem);font-weight:600;color:var(--accent);background:rgba(0,229,160,.1);border:1px solid rgba(0,229,160,.25);padding:8px 36px;border-radius:50px}
+.call-card .tb{margin-top:16px;font-size:clamp(1.5rem,3vw,2.5rem);font-weight:600;color:var(--accent);background:rgba(0,229,160,.1);border:1px solid rgba(0,229,160,.25);padding:12px 42px;border-radius:50px}
 .history-card{background:var(--surface);border:1px solid var(--border);border-radius:24px;padding:12px;display:flex;flex-direction:column;gap:12px;overflow-y:auto}
 .history-card h2{font-size:1.1rem;text-transform:uppercase;letter-spacing:4px;color:var(--muted);text-align:center;margin-bottom:8px}
 #history-list { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; }
 .hi{background:var(--glass);padding:8px 12px;border-radius:12px;border-left:4px solid var(--primary);display:flex;flex-direction:column;gap:4px;min-height:50px}
-.hi .hp{font-size:1.6rem;font-weight:700;line-height:1}
-.hi .ht{font-size:0.75rem;color:var(--muted);text-align:left}
+.hi .hp{font-size:2.2rem;font-weight:700;line-height:1}
+.hi .ht{font-size:1.1rem;color:var(--muted);text-align:left}
 .panel-footer{display:flex;justify-content:space-between;align-items:center;padding:0 32px;background:var(--surface);border:1px solid var(--border);border-radius:24px}
 .panel-footer .brand{font-family:'Oswald',sans-serif;font-size:1.6rem;font-weight:700;background:linear-gradient(135deg,var(--primary),var(--accent));-webkit-background-clip:text;background-clip:text;-webkit-text-fill-color:transparent}
 #clock{font-size:1.8rem;font-weight:700;font-variant-numeric:tabular-nums}
@@ -94,7 +94,7 @@ label{display:block;font-size:.8rem;font-weight:600;color:var(--muted);text-tran
 #panel-body.layout-video .call-card { flex: 0 0 40%; }
 #panel-body.layout-video .history-card { flex: 1; min-height: 0; }
 #panel-body.layout-video .call-card .pw { font-size:clamp(4rem, 10vw, 10rem); }
-#panel-body.layout-video .call-card .tb { font-size:clamp(0.9rem, 1.8vw, 1.4rem); padding: 6px 24px; margin-top: 10px;}
+#panel-body.layout-video .call-card .tb { font-size:clamp(1.2rem, 2.5vw, 2rem); padding: 8px 30px; margin-top: 12px;}
 #panel-body.layout-video .call-card .lbl { font-size:clamp(0.8rem, 1.2vw, 1.2rem); }
 /* ─── TERMINAL DASHBOARD VIEW ───────────────── */
 .terminal-root {

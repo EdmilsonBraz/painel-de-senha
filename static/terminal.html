@@ -206,7 +206,8 @@
 
   async function recall() {
     try {
-      const r = await fetch('/api/recall', {method:'POST', headers: authH()});
+      const url = '/api/recall?terminal=' + encodeURIComponent(currentGuiche);
+      const r = await fetch(url, {method:'POST', headers: authH()});
       const d = await r.json();
       if(d.error) { showNotice(d.error, 'warn'); }
       else {

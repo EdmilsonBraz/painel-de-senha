@@ -47,10 +47,16 @@
   let tenantId = null;
   let voiceIndex = null;
   let voices = [];
+  
+  let callQueue = [];
+  let isCalling = false;
 
   function setupVoices() {
     if(!window.speechSynthesis) return;
-    voices = window.speechSynthesis.getVoices().filter(v => v.lang.includes('pt-'));
+    let allVoices = window.speechSynthesis.getVoices();
+    let ptVoices = allVoices.filter(v => v.lang.includes('pt-'));
+    let otherVoices = allVoices.filter(v => !v.lang.includes('pt-'));
+    voices = [...ptVoices, ...otherVoices];
   }
   if(window.speechSynthesis) {
     window.speechSynthesis.onvoiceschanged = setupVoices;
@@ -138,33 +144,71 @@
     }
   }
 
-  function speak(pass, term) {
-    if(!window.speechSynthesis) return;
-    window.speechSynthesis.cancel();
-    const u = new SpeechSynthesisUtterance();
-    u.lang  = 'pt-BR'; u.rate = 0.88; u.volume = 1;
-    
-    if (voiceIndex !== null && voiceIndex !== undefined && voices[voiceIndex]) {
-        u.voice = voices[voiceIndex];
-    }
-    
-    u.text  = `Senha ${pass.split('').join(' ')}, ${term}`;
-    let n=0; u.onend = ()=>{ if(++n<2) window.speechSynthesis.speak(u); };
-    window.speechSynthesis.speak(u);
+  async function processQueue() {
+    if(isCalling || callQueue.length === 0) return;
+    isCalling = true;
+    const d = callQueue.shift();
+    await actuallyUpdateDisplay(d);
+    isCalling = false;
+    processQueue();
   }
 
   function updateDisplay(d, silent=false) {
-    lblEl.textContent = d.label || 'CHAMADA';
-    pwEl.classList.remove('flash'); void pwEl.offsetWidth; pwEl.classList.add('flash');
-    pwEl.textContent = d.password;
-    tbEl.textContent = `🖥 ${d.terminal}`;
-    
-    if(!silent) speak(d.password, d.terminal);
-    
-    if(!history.find(h => h.password === d.password && h.time === d.time)) {
-      history.unshift(d); if(history.length>12) history.pop();
-      renderHistory();
+    if (silent) {
+        actuallyUpdateDisplay(d, silent);
+    } else {
+        callQueue.push(d);
+        processQueue();
     }
+  }
+
+  function actuallyUpdateDisplay(d, silent=false) {
+    return new Promise(resolve => {
+        lblEl.textContent = d.label || 'CHAMADA';
+        pwEl.classList.remove('flash'); void pwEl.offsetWidth; pwEl.classList.add('flash');
+        pwEl.textContent = d.password;
+        tbEl.textContent = `🖥 ${d.terminal}`;
+        
+        if(!history.find(h => h.password === d.password && h.time === d.time)) {
+          history.unshift(d); if(history.length>12) history.pop();
+          renderHistory();
+        }
+
+        if(silent || !window.speechSynthesis) {
+            setTimeout(resolve, silent ? 0 : 3000);
+            return;
+        }
+
+        window.speechSynthesis.cancel();
+        
+        const phrase = `Senha ${d.password.split('').join(' ')}, ${d.terminal}`;
+        const u1 = new SpeechSynthesisUtterance(phrase);
+        u1.lang = 'pt-BR'; u1.rate = 0.88; u1.volume = 1;
+        if (voiceIndex !== null && voiceIndex !== undefined && voices[voiceIndex]) {
+            u1.voice = voices[voiceIndex];
+        }
+
+        const u2 = new SpeechSynthesisUtterance(phrase);
+        u2.lang = 'pt-BR'; u2.rate = 0.88; u2.volume = 1;
+        if (voiceIndex !== null && voiceIndex !== undefined && voices[voiceIndex]) {
+            u2.voice = voices[voiceIndex];
+        }
+
+        let fallbackTimeout = setTimeout(resolve, 10000);
+        
+        const finish = () => {
+            clearTimeout(fallbackTimeout);
+            resolve();
+        };
+
+        u2.onend = finish;
+        u2.onerror = finish;
+
+        u1.onend = () => { setTimeout(() => window.speechSynthesis.speak(u2), 200); };
+        u1.onerror = () => { setTimeout(() => window.speechSynthesis.speak(u2), 200); };
+
+        window.speechSynthesis.speak(u1);
+    });
   }
 
   function renderHistory() {

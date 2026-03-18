@@ -548,12 +548,15 @@
   let voices = [];
   function setupVoices() {
       if(!window.speechSynthesis) return;
-      voices = window.speechSynthesis.getVoices().filter(v => v.lang.includes('pt-'));
+      let allVoices = window.speechSynthesis.getVoices();
+      let ptVoices = allVoices.filter(v => v.lang.includes('pt-'));
+      let otherVoices = allVoices.filter(v => !v.lang.includes('pt-'));
+      voices = [...ptVoices, ...otherVoices];
       const sel = document.getElementById('cfg-voice');
       if(!sel) return;
       
       const currentVal = sel.value;
-      sel.innerHTML = voices.map((v,i) => `<option value="${i}">${v.name}</option>`).join('');
+      sel.innerHTML = voices.map((v,i) => `<option value="${i}">${v.name} (${v.lang})</option>`).join('');
       
       if(currentVal) sel.value = currentVal;
       else if(session?.config?.system_voice_index) sel.value = session.config.system_voice_index;

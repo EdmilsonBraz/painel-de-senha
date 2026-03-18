@@ -289,11 +289,17 @@ async def call_next_tenant(terminal: str, type: Optional[str] = None, user: User
     return call_data
 
 @app.post("/api/recall")
-async def recall_last(user: User = Depends(get_current_user)):
+async def recall_last(terminal: Optional[str] = None, user: User = Depends(get_current_user)):
     if not user.tenant_id: raise HTTPException(403)
     _, _, h = get_tenant_queues(user.tenant_id)
     if not h: return {"error": "Nenhuma senha para repetir"}
-    last = h[0]
+    
+    if terminal:
+        last = next((x for x in h if x["terminal"] == terminal), None)
+        if not last: return {"error": f"Nenhuma senha anterior no guichê {terminal}"}
+    else:
+        last = h[0]
+
     await sio.emit(f"password_called_{user.tenant_id}", last)
     return last
 
